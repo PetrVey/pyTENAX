@@ -8,7 +8,7 @@ Created on Thu Oct 17 14:53:36 2024
 
 import numpy as np
 import pandas as pd
-from src.pyTENAX import TENAX
+from pyTENAX import TENAX
 import time 
 
 S = TENAX(
