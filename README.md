@@ -1,2 +1,0 @@
-# pyTENAX
-tenax model

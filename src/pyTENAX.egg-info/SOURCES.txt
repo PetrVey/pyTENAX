@@ -1,0 +1,8 @@
+.gitignore
+LICENSE
+README.rst
+setup.py
+src/pyTENAX.egg-info/PKG-INFO
+src/pyTENAX.egg-info/SOURCES.txt
+src/pyTENAX.egg-info/dependency_links.txt
+src/pyTENAX.egg-info/top_level.txt
