@@ -5,19 +5,28 @@ Created on Thu Oct 17 14:53:36 2024
 @Riccardo Ciceri, riccardo.ciceri@studenti.unipd.it
 # Developed starting from https://zenodo.org/records/11935026
 """
+import os
+# os.environ['USE_PYGEOS'] = '0'
+from os.path import dirname, abspath, join
+import sys
+THIS_DIR = dirname(__file__)
+CODE_DIR = abspath(join(THIS_DIR, '/', 'src'))
+sys.path.append(CODE_DIR)
 
 import numpy as np
 import pandas as pd
-from pyTENAX import TENAX
+from pyTENAX.pyTENAX import *
 import time 
+import sys
+
 
 S = TENAX(
         return_period = [2,5,10,20,50,100, 200],
         durations = [10, 60, 180, 360, 720, 1440],
-        left_censoring = [0, 0.90]
+        left_censoring = [0, 0.90],
     )
 
-file_path_input ="prec_data.csv"
+file_path_input ="res/prec_data.csv"
 #Load data from csv file
 data=pd.read_csv(file_path_input, parse_dates=True, index_col='prec_time')
 name_col = "prec_values" #name of column containing data to extract
@@ -26,12 +35,14 @@ start_time = time.time()
 
 #push values belows 0.1 to 0 in prec due to 
 data.loc[data[name_col] < S.min_rain, name_col] = 0
+
+
 data = S.remove_incomplete_years(data, name_col)
 
 
 #get data from pandas to numpy array
 df_arr = np.array(data[name_col])
-df_dates=np.array(data.index)
+df_dates = np.array(data.index)
 
 #extract indexes of ordinary events
 #these are time-wise indexes =>returns list of np arrays with np.timeindex
@@ -50,7 +61,7 @@ elapsed_time = time.time() - start_time
 print(f"Elapsed time get OE: {elapsed_time:.4f} seconds")
 
 #load temperature data
-t_data=pd.read_csv("temp_data.csv", parse_dates=True, index_col='temp_time')
+t_data=pd.read_csv("res/temp_data.csv", parse_dates=True, index_col='temp_time')
 
 
 start_time = time.time()
