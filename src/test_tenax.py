@@ -18,7 +18,7 @@ sys.path.append(CODE_DIR)
 sys.path.append(RES_DIR)
 import numpy as np
 import pandas as pd
-from pyTENAX.pyTENAX import *
+from pyTENAX import *
 import time 
 import sys
 
