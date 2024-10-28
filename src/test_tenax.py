@@ -8,11 +8,14 @@ Created on Thu Oct 17 14:53:36 2024
 import os
 # os.environ['USE_PYGEOS'] = '0'
 from os.path import dirname, abspath, join
+from os import getcwd
 import sys
-THIS_DIR = dirname(__file__)
-CODE_DIR = abspath(join(THIS_DIR, '/', 'src'))
+#run this fro src folder, otherwise it doesn't work
+THIS_DIR = dirname(getcwd())
+CODE_DIR = join(THIS_DIR, 'src')
+RES_DIR =  join(THIS_DIR, 'res')
 sys.path.append(CODE_DIR)
-
+sys.path.append(RES_DIR)
 import numpy as np
 import pandas as pd
 from pyTENAX.pyTENAX import *
@@ -26,9 +29,13 @@ S = TENAX(
         left_censoring = [0, 0.90],
     )
 
-file_path_input ="res/prec_data.csv"
+file_path_input =f"{RES_DIR}/prec_data_Aadorf.parquet"
 #Load data from csv file
-data=pd.read_csv(file_path_input, parse_dates=True, index_col='prec_time')
+data=pd.read_parquet(file_path_input)
+# Convert 'prec_time' column to datetime, if it's not already
+data['prec_time'] = pd.to_datetime(data['prec_time'])
+# Set 'prec_time' as the index
+data.set_index('prec_time', inplace=True)
 name_col = "prec_values" #name of column containing data to extract
 
 start_time = time.time()
@@ -61,8 +68,12 @@ elapsed_time = time.time() - start_time
 print(f"Elapsed time get OE: {elapsed_time:.4f} seconds")
 
 #load temperature data
-t_data=pd.read_csv("res/temp_data.csv", parse_dates=True, index_col='temp_time')
-
+file_path_temperature = f"{RES_DIR}/temp_data_Aadorf.parquet"
+t_data=pd.read_parquet(file_path_temperature)
+# Convert 'temp_time' column to datetime if it's not already in datetime format
+t_data['temp_time'] = pd.to_datetime(t_data['temp_time'])
+# Set 'temp_time' as the index
+t_data.set_index('temp_time', inplace=True)
 
 start_time = time.time()
 temp_name_col = "temp_values"
