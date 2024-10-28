@@ -8,14 +8,11 @@ Created on Thu Oct 17 14:53:36 2024
 import os
 # os.environ['USE_PYGEOS'] = '0'
 from os.path import dirname, abspath, join
-from os import getcwd
 import sys
-#run this fro src folder, otherwise it doesn't work
-THIS_DIR = dirname(getcwd())
-CODE_DIR = join(THIS_DIR, 'src')
-RES_DIR =  join(THIS_DIR, 'res')
+THIS_DIR = dirname(__file__)
+CODE_DIR = abspath(join(THIS_DIR, '/', 'src'))
 sys.path.append(CODE_DIR)
-sys.path.append(RES_DIR)
+
 import numpy as np
 import pandas as pd
 from pyTENAX.pyTENAX import *
@@ -29,7 +26,7 @@ S = TENAX(
         left_censoring = [0, 0.90],
     )
 
-file_path_input =f"{RES_DIR}/prec_data_Aadorf.csv"
+file_path_input ="res/prec_data.csv"
 #Load data from csv file
 data=pd.read_csv(file_path_input, parse_dates=True, index_col='prec_time')
 name_col = "prec_values" #name of column containing data to extract
@@ -64,7 +61,7 @@ elapsed_time = time.time() - start_time
 print(f"Elapsed time get OE: {elapsed_time:.4f} seconds")
 
 #load temperature data
-t_data=pd.read_csv(f"{RES_DIR}/temp_data_Aadorf.csv", parse_dates=True, index_col='temp_time')
+t_data=pd.read_csv("res/temp_data.csv", parse_dates=True, index_col='temp_time')
 
 
 start_time = time.time()
