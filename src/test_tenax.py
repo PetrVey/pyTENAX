@@ -113,10 +113,15 @@ print(RL)
 
 
 #PLOTTING THE GRAPHS
+
+eT = np.arange(np.min(T),np.max(T)+1,1) # define x values to calculate distributions
+
 # fig 2a
+qs = [.85,.95,.99,.999]
+TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b')
+
 
 #fig 2b
-eT = np.arange(np.min(T),np.max(T)+1,1)
 TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT,obscol='r',valcol = 'b')
 
 

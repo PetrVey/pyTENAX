@@ -863,7 +863,51 @@ def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol, valcol):#, Tlims):
     
     plt.show()
     
+def inverse_magnitude_model(F_phat,eT,qs):
+    """
+    Calculate percentiles from the Weibell magnitude model
 
+    Parameters
+    ----------
+    F_phat : array
+        distribution values. F_phat = [kappa_0,b,lambda_0,a].
+    x : numpy.ndarray
+        x (temperature) values from which to produce distribution.
+    qs : list
+        list of percentiles to calculate (between 0 and 1). e.g. [0.85,0.95,0.99].
+
+    Returns
+    -------
+    percentile_lines : numpy.ndarray
+        array with shape length(qs) by length(eT) giving the magnitudes for each eT. percentile_lines[0] are the values for qs[0].  
+
+    """
+    
+    percentile_lines = np.zeros((len(qs), len(eT)))
+    for iq, q in enumerate(qs):
+        
+        
+        percentile_lines[iq,:] = F_phat[2]*np.exp(F_phat[3] * eT)*(-np.log(1-q))**(1/(F_phat[0]+F_phat[1]*eT))
+   
+    return percentile_lines
+
+def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol,valcol):
+    # TO DO: documentation, adjustable axes, line labels instead of legend
+    
+    percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
+    plt.scatter(T,P,s=1,color='r')
+    plt.plot(eT,[thr]*np.size(eT),'--',alpha = 0.5,color = obscol)
+    n=0
+    while n<np.size(qs):
+        plt.plot(eT,percentile_lines[n],label = str(qs[n]),color = valcol)
+        n=n+1
+
+    plt.legend()
+    plt.yscale('log')
+    plt.ylim(0.1,1000) # change this so it's adjustable
+    plt.xlim(-12,30)
+    plt.show()
+    
 
 def all_bueno():
     print("d(・ᴗ・)")
