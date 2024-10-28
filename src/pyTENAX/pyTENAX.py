@@ -854,11 +854,9 @@ def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol, valcol):#, Tlims):
     
     # Set plot parameters
     #ax.set_xlim(Tlims)
-    plt.set_xlabel('T [°C]',fontsize=14)
-    plt.set_ylabel('pdf',fontsize=14)
+    plt.xlabel('T [°C]',fontsize=14)
+    plt.ylabel('pdf',fontsize=14)
     plt.legend(fontsize=8) #NEED TO SET LOCATION OF THIS, maybe fontsize is too small as well
-    #ax.grid(False)
-    plt.set_box_aspect(1) 
     plt.tick_params(axis='both', which='major', labelsize=14)
     
     plt.show()
@@ -891,12 +889,14 @@ def inverse_magnitude_model(F_phat,eT,qs):
    
     return percentile_lines
 
+
+
 def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol,valcol):
-    # TO DO: documentation, adjustable axes, line labels instead of legend
+    # TO DO: documentation, adjustable axes, line labels instead of legend, axis labels
     
     percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
-    plt.scatter(T,P,s=1,color='r')
-    plt.plot(eT,[thr]*np.size(eT),'--',alpha = 0.5,color = obscol)
+    plt.scatter(T,P,s=1,color='r',label = 'observations')
+    plt.plot(eT,[thr]*np.size(eT),'--',alpha = 0.5,color = 'k',label = 'Left censoring threshold') #plot threshold
     n=0
     while n<np.size(qs):
         plt.plot(eT,percentile_lines[n],label = str(qs[n]),color = valcol)
