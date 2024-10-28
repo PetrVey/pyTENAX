@@ -110,3 +110,13 @@ n = n_ordinary_per_year.sum() / len(n_ordinary_per_year)
 #estimates return levels using MC samples
 RL, _, __ = S.model_inversion(F_phat, g_phat, n, Ts)
 print(RL)
+
+
+#PLOTTING THE GRAPHS
+# fig 2a
+
+#fig 2b
+eT = np.arange(np.min(T),np.max(T)+1,1)
+TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT,obscol='r',valcol = 'b')
+
+

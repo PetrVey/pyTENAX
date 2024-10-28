@@ -12,6 +12,7 @@ from scipy.special import gamma
 from scipy.stats import norm
 from scipy.optimize import root_scalar
 import time
+import matplotlib.pyplot as plt
 
 class TENAX():
     """
@@ -827,6 +828,41 @@ def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess):
             qnt[t] = result.root
 
     return qnt
+
+def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol, valcol):#, Tlims):
+    """
+    Plots the observational and model temperature pdf
+    
+    Parameters:
+    T: Array of observed temperatures
+    g_phat: [mu, sigma] of temperature distribution
+    beta: value of beta in generalised normal distribution
+    eT: x (temperature) values to produce distribution with
+    obscol (string): colour of observations  
+    valcol (string): colour of model plot
+        
+    Returns:
+    """
+    
+    # Plot empirical PDF of T
+    eT_edges = np.concatenate([np.array([eT[0]-(eT[1]-eT[0])/2]),(eT + (eT[1]-eT[0])/2)]) #convert bin centres into bin edges
+    hist, bin_edges = np.histogram(T, bins=eT_edges, density=True)
+    plt.plot(eT, hist, '--', color=obscol, label='observations')
+    
+    # Plot analytical PDF of T (validation)
+    plt.plot(eT, gen_norm_pdf(eT, g_phat[0], g_phat[1], beta), '-', color=valcol, label='temperature model g(T)')
+    
+    # Set plot parameters
+    #ax.set_xlim(Tlims)
+    plt.set_xlabel('T [°C]',fontsize=14)
+    plt.set_ylabel('pdf',fontsize=14)
+    plt.legend(fontsize=8) #NEED TO SET LOCATION OF THIS, maybe fontsize is too small as well
+    #ax.grid(False)
+    plt.set_box_aspect(1) 
+    plt.tick_params(axis='both', which='major', labelsize=14)
+    
+    plt.show()
+    
 
 
 def all_bueno():
