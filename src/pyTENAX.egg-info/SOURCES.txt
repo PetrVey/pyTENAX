@@ -5,6 +5,9 @@ env.yml
 requirements.txt
 setup.py
 to_do.md
+__pycache__/pyTENAX.cpython-311.pyc
+dist/pyTENAX-0.0.1-py3-none-any.whl
+dist/pyTENAX-0.0.1.tar.gz
 res/prec_data.csv
 res/prec_data_Aadorf.parquet
 res/temp_data.csv
