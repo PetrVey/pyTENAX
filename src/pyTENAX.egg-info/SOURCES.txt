@@ -6,9 +6,9 @@ requirements.txt
 setup.py
 to_do.md
 res/prec_data.csv
-res/prec_data_Aadorf.csv
+res/prec_data_Aadorf.parquet
 res/temp_data.csv
-res/temp_data_Aadorf.csv
+res/temp_data_Aadorf.parquet
 src/test_tenax.py
 src/pyTENAX/pyTENAX.py
 src/pyTENAX.egg-info/PKG-INFO
