@@ -908,6 +908,9 @@ def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol,valcol):
     plt.xlim(-12,30)
     plt.show()
     
+    
+
+    
 
 def all_bueno():
     print("d(・ᴗ・)")
