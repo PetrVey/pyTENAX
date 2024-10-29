@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 
 
 S = TENAX(
-        return_period = [2,5,10,20,50,100, 200],
+        return_period = [1.001,1.2,1.5,2,5,10,20,50,100, 200],  #for some reason it doesnt like calculating RP =<1
         durations = [10, 60, 180, 360, 720, 1440],
         left_censoring = [0, 0.90],
     )
@@ -127,18 +127,24 @@ TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b')
 TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT,obscol='r',valcol = 'b')
 
 
-#fig 4 (without SMEV)
+#fig 4 (without SMEV and uncertainty) #NEED TO TURN THIS INTO A FUNCTION
 
-plt.plot(S.return_period,RL)
-plt.title(file_path_input)
+AMS = data.groupby(data.index.year).max()
+AMS_sort = AMS.sort_values(by=['prec_values'])
+plot_pos = np.arange(1,np.size(AMS)+1)/(1+np.size(AMS))
+eRP = 1/(1-plot_pos)
+
+plt.plot(S.return_period,RL,label = 'The TENAX model')  #plot calculated return levels
+plt.plot(eRP,AMS_sort,'g+',label = 'Observed annual maxima') #plot observed return levels
 plt.xscale('log')
 plt.xlabel('return period (years)')
 plt.ylabel('10-minute precipitation (mm)')
+plt.legend()
 plt.xlim(1,200)
 plt.ylim(0,50)
 plt.show()
 
-
+#fig 5 
 
 
 
