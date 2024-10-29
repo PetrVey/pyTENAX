@@ -21,6 +21,8 @@ import pandas as pd
 from pyTENAX.pyTENAX import *
 import time 
 import sys
+import matplotlib.pyplot as plt
+
 
 
 S = TENAX(
@@ -114,7 +116,7 @@ print(RL)
 
 #PLOTTING THE GRAPHS
 
-eT = np.arange(np.min(T),np.max(T)+1,1) # define x values to calculate distributions
+eT = np.arange(np.min(T),np.max(T)+1,1) # define T values to calculate distributions
 
 # fig 2a
 qs = [.85,.95,.99,.999]
@@ -123,5 +125,20 @@ TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b')
 
 #fig 2b
 TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT,obscol='r',valcol = 'b')
+
+
+#fig 4 (without SMEV)
+
+plt.plot(S.return_period,RL)
+plt.title(file_path_input)
+plt.xscale('log')
+plt.xlabel('return period (years)')
+plt.ylabel('10-minute precipitation (mm)')
+plt.xlim(1,200)
+plt.ylim(0,50)
+plt.show()
+
+
+
 
 
