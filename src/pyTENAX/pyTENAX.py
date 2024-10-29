@@ -829,20 +829,35 @@ def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess):
 
     return qnt
 
-def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol, valcol):#, Tlims):
+def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',xlimits = [-15,30],ylimits = [0,0.06]):
     """
-    Plots the observational and model temperature pdf
+    Plots the observational and model temperature pdf    
+
+    Parameters
+    ----------
+    T : numpy.ndarray
+        Array of observed temperatures.
+    g_phat : numpy.ndarray
+        [mu, sigma] of temperature distribution.
+    beta : float
+        value of beta in generalised normal distribution.
+    eT : numpy.ndarray
+        x (temperature) values to produce distribution.
+    obscol : string, optional
+        color to plot observations. The default is 'r'.
+    valcol : string, optional
+        color to plot magnitude model. The default is 'b'.
+    xlimits : list, optional
+        limits for the x axis [lower_x_limit, upper_x_limit]. The default is [-15,30].
+    ylimits : list, optional
+        limits for the y axis [lower_y_limit, upper_y_limit]. The default is [0,0.06].
+
+    Returns
+    -------
+    None.
+
+    """
     
-    Parameters:
-    T: Array of observed temperatures
-    g_phat: [mu, sigma] of temperature distribution
-    beta: value of beta in generalised normal distribution
-    eT: x (temperature) values to produce distribution with
-    obscol (string): colour of observations  
-    valcol (string): colour of model plot
-        
-    Returns:
-    """
     
     # Plot empirical PDF of T
     eT_edges = np.concatenate([np.array([eT[0]-(eT[1]-eT[0])/2]),(eT + (eT[1]-eT[0])/2)]) #convert bin centres into bin edges
@@ -856,6 +871,8 @@ def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol, valcol):#, Tlims):
     #ax.set_xlim(Tlims)
     plt.xlabel('T [°C]',fontsize=14)
     plt.ylabel('pdf',fontsize=14)
+    plt.ylim(ylimits[0],ylimits[1])
+    plt.xlim(xlimits[0],xlimits[1])
     plt.legend(fontsize=8) #NEED TO SET LOCATION OF THIS, maybe fontsize is too small as well
     plt.tick_params(axis='both', which='major', labelsize=14)
     
@@ -891,11 +908,11 @@ def inverse_magnitude_model(F_phat,eT,qs):
 
 
 
-def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol,valcol):
+def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12,30],ylimits = [0.1,1000]):
     # TO DO: documentation, adjustable axes, line labels instead of legend, axis labels
     
     percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
-    plt.scatter(T,P,s=1,color='r',label = 'observations')
+    plt.scatter(T,P,s=1,color=obscol,label = 'observations')
     plt.plot(eT,[thr]*np.size(eT),'--',alpha = 0.5,color = 'k',label = 'Left censoring threshold') #plot threshold
     n=0
     while n<np.size(qs):
@@ -904,13 +921,41 @@ def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol,valcol):
 
     plt.legend()
     plt.yscale('log')
-    plt.ylim(0.1,1000) # change this so it's adjustable
-    plt.xlim(-12,30)
+    plt.ylim(ylimits[0],ylimits[1])
+    plt.xlim(xlimits[0],xlimits[1])
     plt.show()
     
     
-
+def TNX_FIG_valid(AMS,RP,RL,column_name,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],ylimits = [0,50]): #figure 4
     
+    AMS_sort = AMS.sort_values(by=[column_name])
+    plot_pos = np.arange(1,np.size(AMS)+1)/(1+np.size(AMS))
+    eRP = 1/(1-plot_pos)
+    
+    
+    plt.plot(RP,RL,color = TENAXcol, label = 'The TENAX model')  #plot calculated return levels
+    plt.plot(eRP,AMS_sort,obscol_shape,label = 'Observed annual maxima') #plot observed return levels
+    plt.xscale('log')
+    plt.xlabel('return period (years)')
+    plt.ylabel('10-minute precipitation (mm)')
+    plt.legend()
+    plt.xlim(xlimits[0],xlimits[1])
+    plt.ylim(ylimits[0],ylimits[1])
+    plt.show()
+
+def TNX_FIG_scaling(P,T,F_phat,eT,qs = [0.99],obscol='r',valcol='b',xlimits = [-12,30],ylimits = [0.1,1000]):
+    percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
+    plt.scatter(T,P,s=1,color=obscol,label = 'observations')
+    
+    n=0
+    while n<np.size(qs):
+        plt.plot(eT,percentile_lines[n],label = str(qs[n]),color = valcol)
+        n=n+1
+
+    plt.yscale('log')
+    plt.ylim(ylimits[0],ylimits[1])
+    plt.xlim(xlimits[0],xlimits[1])
+    plt.show()    
 
 def all_bueno():
     print("d(・ᴗ・)")
