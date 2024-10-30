@@ -926,10 +926,10 @@ def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12
     plt.show()
     
     
-def TNX_FIG_valid(AMS,RP,RL,column_name,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],ylimits = [0,50]): #figure 4
+def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],ylimits = [0,50]): #figure 4
     
-    AMS_sort = AMS.sort_values(by=[column_name])
-    plot_pos = np.arange(1,np.size(AMS)+1)/(1+np.size(AMS))
+    AMS_sort = AMS.sort_values(by=['AMS'])['AMS']
+    plot_pos = np.arange(1,np.size(AMS_sort)+1)/(1+np.size(AMS_sort))
     eRP = 1/(1-plot_pos)
     
     
@@ -943,18 +943,24 @@ def TNX_FIG_valid(AMS,RP,RL,column_name,TENAXcol='b',obscol_shape = 'g+',xlimits
     plt.ylim(ylimits[0],ylimits[1])
     plt.show()
 
-def TNX_FIG_scaling(P,T,F_phat,eT,qs = [0.99],obscol='r',valcol='b',xlimits = [-12,30],ylimits = [0.1,1000]):
+def TNX_FIG_scaling(P,T,F_phat,eT,iTs,qperc_model,qperc_obs,qs = [0.99],obscol='r',valcol='b',xlimits = [-12,30],ylimits = [0.1,1000]):
     percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
-    plt.scatter(T,P,s=1,color=obscol,label = 'observations')
+    plt.scatter(T,P,s=1.5,color=obscol,alpha = 0.3,label = 'observations')
+    
+    qperc_obs_med = np.median(qperc_obs,axis=1)
+    qperc_model_med = np.median(qperc_model,axis=1)
+    plt.plot(iTs[1:-8]+(iTs[2]-iTs[1])/2,qperc_obs_med[1:-8],'--xr',label = 'Binning method') # don't really know why we cut off at the end like this
+    plt.plot(iTs[1:-6]+(iTs[2]-iTs[1])/2,qperc_model_med[1:-6],'-om',label = 'The TENAX model')
     
     n=0
     while n<np.size(qs):
-        plt.plot(eT,percentile_lines[n],label = str(qs[n]),color = valcol)
+        plt.plot(eT,percentile_lines[n],color = valcol,label = 'Magnitude model W(x,T)')
         n=n+1
 
     plt.yscale('log')
     plt.ylim(ylimits[0],ylimits[1])
     plt.xlim(xlimits[0],xlimits[1])
+    plt.legend(title = str(qs[0]*100)+'th percentile lines computed by:')
     plt.show()    
 
 def all_bueno():
