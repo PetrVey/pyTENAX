@@ -110,8 +110,9 @@ g_phat = S.temperature_model(T)
 # M is mean n of ordinary events
 n = n_ordinary_per_year.sum() / len(n_ordinary_per_year)  
 #estimates return levels using MC samples
-RL, T_mc, P_mc = S.model_inversion(F_phat, g_phat, n, Ts)
+RL, _, _ = S.model_inversion(F_phat, g_phat, n, Ts) 
 print(RL)
+
 
 
 #PLOTTING THE GRAPHS
@@ -128,12 +129,50 @@ TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT)
 
 
 #fig 4 (without SMEV and uncertainty) #NEED TO TURN THIS INTO A FUNCTION
-TNX_FIG_valid(AMS,S.return_period,RL,name_col)
+AMS = dict_AMS['10'] # yet the annual maxima
+TNX_FIG_valid(AMS,S.return_period,RL)
 
 
 
 #fig 5 
-#TNX_FIG_scaling()
+
+
+S2 = TENAX(
+        return_period = [1.1,1.2,1.5,2,5,10,20,50,100, 200],  #for some reason it doesnt like calculating RP =<1
+        durations = [10, 60, 180, 360, 720, 1440],
+        left_censoring = [0, 0.90],
+        n_monte_carlo = np.size(P)*S.niter_smev
+    )
+
+RL2, T_mc, P_mc = S2.model_inversion(F_phat, g_phat, n, Ts) #new so can define the monte_carlo iterations differently
+
+scaling_prc = 0.99
+
+T_mc = np.reshape(T_mc,[np.size(T),S.niter_smev])
+P_mc = np.reshape(P_mc,[np.size(P),S.niter_smev])
+
+qperc_model = np.zeros([np.size(iTs),S.niter_smev])
+qperc_obs = np.zeros([np.size(iTs),S.niter_smev])
+
+iTs = np.arange(-2.5,37.5,1.5)
+
+for nit in range(S.niter_smev):
+    for i in range(np.size(iTs)-1):
+        tmpP = P_mc[:, nit]
+        mask_model = (T_mc[:, nit] > iTs[i]) & (T_mc[:, nit] <= iTs[i + 1])
+        if np.any(mask_model):
+            qperc_model[i, nit] = np.quantile(tmpP[mask_model], scaling_prc)
+            
+        mask_obs = (T > iTs[i]) & (T <= iTs[i + 1])
+        if np.any(mask_obs):
+            qperc_obs[i] = np.quantile(P[mask_obs], scaling_prc)
+        
+qperc_obs_med = np.median(qperc_obs,axis=1)
+qperc_model_med = np.median(qperc_model,axis=1)
+
+
+
+TNX_FIG_scaling(P,T,F_phat,eT,iTs,qperc_model,qperc_obs)
 
 
 #fig 3
