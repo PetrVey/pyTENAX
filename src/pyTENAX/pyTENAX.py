@@ -12,6 +12,7 @@ from scipy.special import gamma
 from scipy.stats import norm
 from scipy.optimize import root_scalar
 import time
+import statsmodels.api as sm
 import matplotlib.pyplot as plt
 
 class TENAX():
@@ -567,7 +568,7 @@ class TENAX():
                                     ))
         
         # Generate P_mc if needed
-        P_mc = weibull_min.ppf(np.random.rand(self.n_monte_carlo), c=wbl_phat[:, 0], scale=wbl_phat[:, 1])
+        P_mc = weibull_min.ppf(np.random.rand(self.n_monte_carlo), c=wbl_phat[:, 1], scale=wbl_phat[:, 0])
     
         vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05)
         
@@ -906,6 +907,11 @@ def inverse_magnitude_model(F_phat,eT,qs):
    
     return percentile_lines
 
+def TNX_obs_scaling_rate(P,T,qs,niter):
+    T = sm.add_constant(T)  # Add a constant (intercept) term
+    model = sm.QuantReg(np.log(P), T)
+    qhat = model.fit(q=qs).params
+    return qhat
 
 
 def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12,30],ylimits = [0.1,1000]):
@@ -943,13 +949,41 @@ def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],y
     plt.ylim(ylimits[0],ylimits[1])
     plt.show()
 
-def TNX_FIG_scaling(P,T,F_phat,eT,iTs,qperc_model,qperc_obs,qs = [0.99],obscol='r',valcol='b',xlimits = [-12,30],ylimits = [0.1,1000]):
+def TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,niter_smev,eT,iTs,qs = [0.99],obscol='r',valcol='b',xlimits = [-15,30],ylimits = [0.4,1000]):
     percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
-    plt.scatter(T,P,s=1.5,color=obscol,alpha = 0.3,label = 'observations')
+    scaling_rate = (np.exp(F_phat[3])-1)*100
+    qhat = TNX_obs_scaling_rate(P,T,qs[0],niter_smev)
     
+    
+    plt.figure(figsize = (5,5))
+    plt.scatter(T,P,s=1.5,color=obscol,alpha = 0.3,label = 'observations')
+    plt.plot(iTs[0:-7],np.exp(qhat[0])*np.exp(iTs[0:-7]*qhat[1]),'--k',label = 'Quantile regression method')
+    
+    ############################################################### PUT THIS ESLEWHERE    
+    T_mc_bins = np.reshape(T_mc,[np.size(T),niter_smev])
+    P_mc_bins = np.reshape(P_mc,[np.size(P),niter_smev])
+    
+    qperc_model = np.zeros([np.size(iTs),niter_smev])
+    qperc_obs = np.zeros([np.size(iTs),niter_smev])
+    
+    
+    for nit in range(niter_smev):
+        for i in range(np.size(iTs)-1):
+            tmpP = P_mc_bins[:, nit]
+            mask_model = (T_mc_bins[:, nit] > iTs[i]) & (T_mc_bins[:, nit] <= iTs[i + 1])
+            if np.any(mask_model):
+                qperc_model[i, nit] = np.quantile(tmpP[mask_model], qs[0]) # binning monte carlos to get TENAX model
+                
+            mask_obs = (T > iTs[i]) & (T <= iTs[i + 1])
+            if np.any(mask_obs):
+                qperc_obs[i] = np.quantile(P[mask_obs], qs[0]) #binning observations
+            
     qperc_obs_med = np.median(qperc_obs,axis=1)
     qperc_model_med = np.median(qperc_model,axis=1)
-    plt.plot(iTs[1:-8]+(iTs[2]-iTs[1])/2,qperc_obs_med[1:-8],'--xr',label = 'Binning method') # don't really know why we cut off at the end like this
+    
+    #####################################################################################
+    
+    plt.plot(iTs[1:-7]+(iTs[2]-iTs[1])/2,qperc_obs_med[1:-7],'-xr',label = 'Binning method') # don't really know why we cut off at the end like this
     plt.plot(iTs[1:-6]+(iTs[2]-iTs[1])/2,qperc_model_med[1:-6],'-om',label = 'The TENAX model')
     
     n=0
@@ -961,6 +995,7 @@ def TNX_FIG_scaling(P,T,F_phat,eT,iTs,qperc_model,qperc_obs,qs = [0.99],obscol='
     plt.ylim(ylimits[0],ylimits[1])
     plt.xlim(xlimits[0],xlimits[1])
     plt.legend(title = str(qs[0]*100)+'th percentile lines computed by:')
+    
     plt.show()    
 
 def all_bueno():
