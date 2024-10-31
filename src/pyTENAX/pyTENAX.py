@@ -553,13 +553,16 @@ class TENAX():
         
         return g_phat
     
-    def model_inversion(self, F_phat, g_phat, n, Ts):
+    def model_inversion(self, F_phat, g_phat, n, Ts, n_mc=0):
         
         pdf_values = gen_norm_pdf(Ts, g_phat[0], g_phat[1], self.beta)
         df = np.vstack([pdf_values, Ts])
 
         # Generates random T values according to the temperature model
-        T_mc = randdf(self.n_monte_carlo, df, 'pdf').T 
+        if n_mc == 0:
+            T_mc = randdf(self.n_monte_carlo, df, 'pdf').T              
+        else:
+            T_mc = randdf(n_mc, df, 'pdf').T
         
         # Generates random P according to the magnitude model
         wbl_phat = np.column_stack((
@@ -568,7 +571,10 @@ class TENAX():
                                     ))
         
         # Generate P_mc if needed
-        P_mc = weibull_min.ppf(np.random.rand(self.n_monte_carlo), c=wbl_phat[:, 1], scale=wbl_phat[:, 0])
+        if n_mc == 0:
+            P_mc = weibull_min.ppf(np.random.rand(self.n_monte_carlo), c=wbl_phat[:, 1], scale=wbl_phat[:, 0])
+        else:
+            P_mc = weibull_min.ppf(np.random.rand(n_mc), c=wbl_phat[:, 1], scale=wbl_phat[:, 0])
     
         vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05)
         
