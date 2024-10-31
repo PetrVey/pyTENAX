@@ -919,6 +919,16 @@ def TNX_obs_scaling_rate(P,T,qs,niter):
     qhat = model.fit(q=qs).params
     return qhat
 
+def temperature_model_free(beta, data_oe_temp): #this is the same as before just allows you to define beta... should probably change
+    
+    mu, sigma = norm.fit(data_oe_temp)
+    init_g = [mu, sigma]
+    
+    g_phat = minimize(lambda par: -gen_norm_loglik(data_oe_temp, par, beta), init_g, method='Nelder-Mead').x
+    
+    return g_phat
+
+
 
 def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12,30],ylimits = [0.1,1000]):
     # TO DO: documentation, adjustable axes, line labels instead of legend, axis labels
@@ -936,6 +946,7 @@ def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12
     plt.ylim(ylimits[0],ylimits[1])
     plt.xlim(xlimits[0],xlimits[1])
     plt.show()
+    
     
     
 def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],ylimits = [0,50]): #figure 4

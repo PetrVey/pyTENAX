@@ -111,7 +111,7 @@ g_phat = S.temperature_model(T)
 # M is mean n of ordinary events
 n = n_ordinary_per_year.sum() / len(n_ordinary_per_year)  
 #estimates return levels using MC samples
-RL, _, _ = S.model_inversion(F_phat, g_phat, n, Ts) 
+RL, T_mc, P_mc = S.model_inversion(F_phat, g_phat, n, Ts,n_mc = np.size(P)*S.niter_smev) 
 print(RL)
 
 
@@ -136,17 +136,56 @@ TNX_FIG_valid(AMS,S.return_period,RL)
 
 
 #fig 5 
-
-
-RL2, T_mc, P_mc = S.model_inversion(F_phat, g_phat, n, Ts,n_mc = np.size(P)*S.niter_smev) #new so can define the monte_carlo iterations differently
-
 iTs = np.arange(-2.5,37.5,1.5) #idk why we need a different T range here 
 
 TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,S.niter_smev,eT,iTs)
 
 
 #fig 3
+season_separations = [5, 10]
+months = dict_ordinary["10"]["oe_time"].dt.month
+winter_inds = months.index[(months>season_separations[1]) | (months<season_separations[0])]
+summer_inds = months.index[(months<season_separations[1]+1)&(months>season_separations[0]-1)]
+T_winter = T[winter_inds]
+T_summer = T[summer_inds]
 
 
+g_phat_winter = temperature_model_free(2, T_winter)
+g_phat_summer = temperature_model_free(2, T_summer)
 
 
+winter_pdf = gen_norm_pdf(eT, g_phat_winter[0], g_phat_winter[1], 2)
+summer_pdf = gen_norm_pdf(eT, g_phat_summer[0], g_phat_summer[1], 2)
+
+combined_pdf = (winter_pdf*np.size(T_winter)+summer_pdf*np.size(T_summer))/(np.size(T_winter)+np.size(T_summer))
+
+eT_edges = np.concatenate([np.array([eT[0]-(eT[1]-eT[0])/2]),(eT + (eT[1]-eT[0])/2)]) #convert bin centres into bin edges
+hist_summer, bin_edges = np.histogram(T_summer, bins=eT_edges, density=True)
+hist_winter, bin_edges = np.histogram(T_winter, bins=eT_edges, density=True)
+hist, bin_edges = np.histogram(T, bins=eT_edges, density=True)
+
+
+plt.plot(eT, hist, '--', color='k')
+plt.plot(eT, gen_norm_pdf(eT, g_phat[0], g_phat[1], 4), '-', color='k', label='Annual')
+
+plt.plot(eT, hist_summer, '--', color='r')
+plt.plot(eT,summer_pdf,'r',label = 'Summer')
+
+plt.plot(eT, hist_winter, '--', color='b')
+plt.plot(eT,winter_pdf,'b',label = 'Winter')
+
+plt.plot(eT,combined_pdf,'m',label = 'Combined summer and winter')
+
+plt.xlabel('T [°C]')
+plt.ylabel('pdf')
+plt.ylim(0,0.1)
+plt.xlim(-15,30)
+
+
+plt.legend()
+
+plt.show()
+
+#TENAX MODEL VALIDATION
+
+#fig 7
