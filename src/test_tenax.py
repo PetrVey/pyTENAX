@@ -142,7 +142,7 @@ iTs = np.arange(-2.5,37.5,1.5) #idk why we need a different T range here
 TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,S.niter_smev,eT,iTs)
 plt.show()
 
-#fig 3
+#SPLITTING INTO SUMMER/WINTER
 season_separations = [5, 10]
 months = dict_ordinary["10"]["oe_time"].dt.month
 winter_inds = months.index[(months>season_separations[1]) | (months<season_separations[0])]
@@ -160,32 +160,16 @@ summer_pdf = gen_norm_pdf(eT, g_phat_summer[0], g_phat_summer[1], 2)
 
 combined_pdf = (winter_pdf*np.size(T_winter)+summer_pdf*np.size(T_summer))/(np.size(T_winter)+np.size(T_summer))
 
-eT_edges = np.concatenate([np.array([eT[0]-(eT[1]-eT[0])/2]),(eT + (eT[1]-eT[0])/2)]) #convert bin centres into bin edges
-hist_summer, bin_edges = np.histogram(T_summer, bins=eT_edges, density=True)
-hist_winter, bin_edges = np.histogram(T_winter, bins=eT_edges, density=True)
-hist, bin_edges = np.histogram(T, bins=eT_edges, density=True)
+
+#fig 3
 
 
-plt.plot(eT, hist, '--', color='k')
-plt.plot(eT, gen_norm_pdf(eT, g_phat[0], g_phat[1], 4), '-', color='k', label='Annual')
-
-plt.plot(eT, hist_summer, '--', color='r')
-plt.plot(eT,summer_pdf,'r',label = 'Summer')
-
-plt.plot(eT, hist_winter, '--', color='b')
-plt.plot(eT,winter_pdf,'b',label = 'Winter')
-
+TNX_FIG_temp_model(T=T_summer, g_phat=g_phat_summer,beta=2,eT=eT,obscol='r',valcol='r',xlimits = [-15,30],ylimits = [0,0.1])
+TNX_FIG_temp_model(T=T_winter, g_phat=g_phat_winter,beta=2,eT=eT,obscol='b',valcol='b',xlimits = [-15,30],ylimits = [0,0.1])
+TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT,obscol='k',valcol='k',xlimits = [-15,30],ylimits = [0,0.1])
 plt.plot(eT,combined_pdf,'m',label = 'Combined summer and winter')
-
-plt.xlabel('T [°C]')
-plt.ylabel('pdf')
-plt.ylim(0,0.1)
-plt.xlim(-15,30)
-
-
-plt.legend()
-
 plt.show()
+
 
 #TENAX MODEL VALIDATION
 yrs = dict_ordinary["10"]["oe_time"].dt.year
@@ -196,11 +180,15 @@ midway = yrs_unique[int(np.ceil(np.size(yrs_unique)/2))]
 P1 = P[yrs<=midway]
 T1 = T[yrs<=midway]
 AMS1 = AMS[AMS['year']<=midway]
+n_ordinary_per_year1 = n_ordinary_per_year[n_ordinary_per_year.index<=midway]
+n1 = n_ordinary_per_year1.sum() / len(n_ordinary_per_year1)
 
 #DEFINE SECOND PERIOD
 P2 = P[yrs>midway]
 T2 = T[yrs>midway]
 AMS2 = AMS[AMS['year']>midway]
+n_ordinary_per_year2 = n_ordinary_per_year[n_ordinary_per_year.index>midway]
+n2 = n_ordinary_per_year2.sum() / len(n_ordinary_per_year2)
 
 
 g_phat1 = S.temperature_model(T1)
@@ -208,10 +196,10 @@ g_phat2 = S.temperature_model(T2)
 
 
 F_phat1, loglik1, _, _ = S.magnitude_model(P1, T1, thr)
-RL1, T_mc1, P_mc1 = S.model_inversion(F_phat1, g_phat1, n, Ts,n_mc = np.size(P1)*S.niter_smev)
+RL1, T_mc1, P_mc1 = S.model_inversion(F_phat1, g_phat1, n1, Ts,n_mc = np.size(P1)*S.niter_smev)
    
 F_phat2, loglik2, _, _ = S.magnitude_model(P2, T2, thr)
-RL2, T_mc2, P_mc2 = S.model_inversion(F_phat2, g_phat2, n, Ts,n_mc = np.size(P2)*S.niter_smev)   
+RL2, T_mc2, P_mc2 = S.model_inversion(F_phat2, g_phat2, n2, Ts,n_mc = np.size(P2)*S.niter_smev)   
 
 if F_phat[2]==0:
     dof=3
@@ -227,22 +215,109 @@ else:
 lambda_LR = -2*( loglik - (loglik1+loglik2) )
 pval = chi2.sf(lambda_LR, dof)
 
+#modelling second model based on first magnitude and changes in mean/std
+mu_delta = np.mean(T2)-np.mean(T1)
+sigma_factor = np.std(T2)/np.std(T1)
+
+g_phat2_predict = [g_phat1[0]+mu_delta, g_phat1[1]*sigma_factor]
+RL2_predict, _,_ = S.model_inversion(F_phat1,g_phat2_predict,n2,Ts)
+
 
 #fig 7a
 
 TNX_FIG_temp_model(T=T1, g_phat=g_phat1,beta=4,eT=eT,obscol='b',valcol='b')
-TNX_FIG_temp_model(T=T2, g_phat=g_phat2,beta=4,eT=eT,obscol='r',valcol='r')
-plt.show()
+TNX_FIG_temp_model(T=T2, g_phat=g_phat2_predict,beta=4,eT=eT,obscol='r',valcol='r') # model based on temp ave and std changes
+plt.show() #this is slightly different in code and paper I think.. using predicted T vs fitted T
 
 #fig 7b
 
+TNX_FIG_valid(AMS1,S.return_period,RL1,TENAXcol='b',obscol_shape = 'b+')
+TNX_FIG_valid(AMS2,S.return_period,RL2_predict,TENAXcol='r',obscol_shape = 'r+')
+
+plt.show()
 
 
 
+# SENSITIVITY ANALYSIS
+
+# changes in T mean, std, and n to chekc sensitivity
+delta_Ts = [-1, 1, 2, 3]
+delta_as = [.9, .95, 1.05, 1.1, 1.2]
+delta_ns = [.5, .75, 1.3, 2]
+
+# T mean sensitivity
+T_sens = np.zeros([np.size(delta_Ts),np.size(S.return_period)])
+i=0
+while i<np.size(delta_Ts):
+    
+    T_sens[i,:],_,_ = S.model_inversion(F_phat, [g_phat[0]+delta_Ts[i],g_phat[1]], n, Ts) 
+    i=i+1
+
+# T std sensitivity
+
+as_sens = np.zeros([np.size(delta_as),np.size(S.return_period)])
+i=0
+while i<np.size(delta_as):
+    
+    as_sens[i,:],_,_ = S.model_inversion(F_phat, [g_phat[0],g_phat[1]*delta_as[i]], n, Ts) 
+    i=i+1
+
+# n sensitivity
+n_sens = np.zeros([np.size(delta_ns),np.size(S.return_period)])
+i=0
+while i<np.size(delta_ns):
+    
+    n_sens[i,:],_,_ = S.model_inversion(F_phat, g_phat, n*delta_ns[i], Ts) 
+    i=i+1
+
+
+#fig 6
+fig = plt.figure(figsize = (15,5))
+ax1 = fig.add_subplot(1,3,1)
+i = 0
+while i< np.size(delta_Ts):  
+    ax1.plot(S.return_period,T_sens[i],'k',alpha = 0.7,label = str(delta_Ts[i]))
+    
+    i=i+1
+plt.xscale('log')
+ax1.plot(S.return_period,RL,'b')
+ax1.set_title('Sensitivity to changes in mean temp')
+plt.legend()
+plt.xscale('log')
+plt.xlim(1,200)
+plt.ylim(0.60)
+
+ax2 = fig.add_subplot(1,3,2)
+i = 0
+while i< np.size(delta_as):  
+    ax2.plot(S.return_period,as_sens[i],'k',alpha = 0.7,label = str(delta_as[i]))
+    
+    i=i+1
+plt.xscale('log')
+ax2.plot(S.return_period,RL,'b',label = 'The TENAX MODEL')
+ax2.set_title('Sensitivity to changes in temp std')
+plt.legend()
+plt.xscale('log')
+plt.xlim(1,200)
+plt.ylim(0.60)
+
+ax3 = fig.add_subplot(1,3,3)
+i = 0
+while i< np.size(delta_ns):  
+    ax3.plot(S.return_period,n_sens[i],'k',alpha = 0.7,label = str(delta_ns[i]))
+    
+    i=i+1
+plt.xscale('log')
+ax3.plot(S.return_period,RL,'b')
+ax3.set_title('Sensitivity to changes in mean events per year (n)')
+plt.legend()
+plt.xscale('log')
+plt.xlim(1,200)
+plt.ylim(0.60)
 
 
 
-
+plt.show()
 
 
 
