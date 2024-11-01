@@ -883,7 +883,6 @@ def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',xlimits = [-15
     plt.legend(fontsize=8) #NEED TO SET LOCATION OF THIS, maybe fontsize is too small as well
     plt.tick_params(axis='both', which='major', labelsize=14)
     
-    plt.show()
     
 def inverse_magnitude_model(F_phat,eT,qs):
     """
@@ -945,7 +944,6 @@ def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12
     plt.yscale('log')
     plt.ylim(ylimits[0],ylimits[1])
     plt.xlim(xlimits[0],xlimits[1])
-    plt.show()
     
     
     
@@ -964,7 +962,6 @@ def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],y
     plt.legend()
     plt.xlim(xlimits[0],xlimits[1])
     plt.ylim(ylimits[0],ylimits[1])
-    plt.show()
 
 def TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,niter_smev,eT,iTs,qs = [0.99],obscol='r',valcol='b',xlimits = [-15,30],ylimits = [0.4,1000]):
     percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
@@ -1012,8 +1009,7 @@ def TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,niter_smev,eT,iTs,qs = [0.99],obscol='r
     plt.ylim(ylimits[0],ylimits[1])
     plt.xlim(xlimits[0],xlimits[1])
     plt.legend(title = str(qs[0]*100)+'th percentile lines computed by:')
-    
-    plt.show()    
+      
 
 def all_bueno():
     print("d(・ᴗ・)")

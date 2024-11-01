@@ -22,6 +22,7 @@ from pyTENAX.pyTENAX import *
 import time 
 import sys
 import matplotlib.pyplot as plt
+from scipy.stats import chi2
 
 
 
@@ -123,23 +124,23 @@ eT = np.arange(np.min(T),np.max(T)+4,1) # define T values to calculate distribut
 # fig 2a
 qs = [.85,.95,.99,.999]
 TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs)
-
+plt.show()
 
 #fig 2b
 TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT)
+plt.show()
 
-
-#fig 4 (without SMEV and uncertainty) #NEED TO TURN THIS INTO A FUNCTION
+#fig 4 (without SMEV and uncertainty) 
 AMS = dict_AMS['10'] # yet the annual maxima
 TNX_FIG_valid(AMS,S.return_period,RL)
-
+plt.show()
 
 
 #fig 5 
 iTs = np.arange(-2.5,37.5,1.5) #idk why we need a different T range here 
 
 TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,S.niter_smev,eT,iTs)
-
+plt.show()
 
 #fig 3
 season_separations = [5, 10]
@@ -187,5 +188,62 @@ plt.legend()
 plt.show()
 
 #TENAX MODEL VALIDATION
+yrs = dict_ordinary["10"]["oe_time"].dt.year
+yrs_unique = np.unique(yrs)
+midway = yrs_unique[int(np.ceil(np.size(yrs_unique)/2))]
 
-#fig 7
+#DEFINE FIRST PERIOD
+P1 = P[yrs<=midway]
+T1 = T[yrs<=midway]
+AMS1 = AMS[AMS['year']<=midway]
+
+#DEFINE SECOND PERIOD
+P2 = P[yrs>midway]
+T2 = T[yrs>midway]
+AMS2 = AMS[AMS['year']>midway]
+
+
+g_phat1 = S.temperature_model(T1)
+g_phat2 = S.temperature_model(T2)
+
+
+F_phat1, loglik1, _, _ = S.magnitude_model(P1, T1, thr)
+RL1, T_mc1, P_mc1 = S.model_inversion(F_phat1, g_phat1, n, Ts,n_mc = np.size(P1)*S.niter_smev)
+   
+F_phat2, loglik2, _, _ = S.magnitude_model(P2, T2, thr)
+RL2, T_mc2, P_mc2 = S.model_inversion(F_phat2, g_phat2, n, Ts,n_mc = np.size(P2)*S.niter_smev)   
+
+if F_phat[2]==0:
+    dof=3
+    alpha1=1; # b parameter is not significantly different from 0; 3 degrees of freedom for the LR test
+else: 
+    dof=4
+    alpha1=0  # b parameter is significantly different from 0; 4 degrees of freedom for the LR test
+
+
+
+
+#check magnitude model the same in both periods
+lambda_LR = -2*( loglik - (loglik1+loglik2) )
+pval = chi2.sf(lambda_LR, dof)
+
+
+#fig 7a
+
+TNX_FIG_temp_model(T=T1, g_phat=g_phat1,beta=4,eT=eT,obscol='b',valcol='b')
+TNX_FIG_temp_model(T=T2, g_phat=g_phat2,beta=4,eT=eT,obscol='r',valcol='r')
+plt.show()
+
+#fig 7b
+
+
+
+
+
+
+
+
+
+
+
+
