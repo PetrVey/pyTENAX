@@ -174,7 +174,7 @@ class TENAX():
         # Step 1: get resolution of dataset (MUST BE SAME in whole dataset!!!)
         time_res = (data_pr.index[-1] - data_pr.index[-2]).total_seconds()/60
         # Step 2: Resample by year and count total and NaN values
-        yearly_valid = data_pr.resample('Y').apply(lambda x: x.notna().sum())  # Count not NaNs per year
+        yearly_valid = data_pr.resample('YE').apply(lambda x: x.notna().sum())  # Count not NaNs per year
         # Step 3: Estimate expected lenght of yearly timeseries
         expected = pd.DataFrame(index = yearly_valid.index)
         expected["Total"] = 1440/time_res*365
@@ -890,7 +890,7 @@ def inverse_magnitude_model(F_phat,eT,qs):
 
     Parameters
     ----------
-    F_phat : array
+    F_phat : numpy.ndarray
         distribution values. F_phat = [kappa_0,b,lambda_0,a].
     x : numpy.ndarray
         x (temperature) values from which to produce distribution.
@@ -912,7 +912,25 @@ def inverse_magnitude_model(F_phat,eT,qs):
    
     return percentile_lines
 
-def TNX_obs_scaling_rate(P,T,qs,niter):
+def TNX_obs_scaling_rate(P,T,qs):
+    """
+    calculate scaling rate for quantile regression
+
+    Parameters
+    ----------
+    P : numpy.ndarray
+        precipitation values
+    T : numpy.ndarray
+        temperature values
+    qs : float
+        percentile.
+
+    Returns
+    -------
+    qhat : numpy.ndarray
+        [something, scaling rate].
+
+    """
     T = sm.add_constant(T)  # Add a constant (intercept) term
     model = sm.QuantReg(np.log(P), T)
     qhat = model.fit(q=qs).params
@@ -930,6 +948,37 @@ def temperature_model_free(beta, data_oe_temp): #this is the same as before just
 
 
 def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12,30],ylimits = [0.1,1000]):
+    """
+    Plots figure 2a. the observed T-P pairs and the W model percentiles.
+
+    Parameters
+    ----------
+    P : numpy.ndarray
+        precipitation values
+    T : numpy.ndarray
+        temperature values 
+    F_phat : numpy.ndarray
+        distribution values. F_phat = [kappa_0,b,lambda_0,a]..
+    thr : float
+        precipitation threshold for the left-censoring.
+    eT : numpy.ndarray
+        x values to plot W model.
+    qs : list
+        percentiles to calculate W.
+    obscol : string, optional
+        color code to plot observations. The default is 'r'.
+    valcol : string, optional
+        color code to plot model. The default is 'b'.
+    xlimits : list, optional
+        [min_x,max_x]. x limits to plot. The default is [-12,30].
+    ylimits : list, optional
+        [min_y,max_y]. y limits to plot. The default is [0.1,1000].
+
+    Returns
+    -------
+    None.
+
+    """
     # TO DO: documentation, adjustable axes, line labels instead of legend, axis labels
     
     percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
@@ -944,10 +993,36 @@ def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12
     plt.yscale('log')
     plt.ylim(ylimits[0],ylimits[1])
     plt.xlim(xlimits[0],xlimits[1])
+    plt.xlabel('T [°C]')
     
     
     
 def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],ylimits = [0,50]): #figure 4
+    """
+    Plots figure 4.
+
+    Parameters
+    ----------
+    AMS : pandas.core.frame.DataFrame
+        Annual maxima.
+    RP : list
+        return periods to plot.
+    RL : numpy.ndarray
+        return levels calculated by TENAX.
+    TENAXcol : string, optional
+        color for tenax line plot. The default is 'b'.
+    obscol_shape : string, optional
+        color and shape of annual maxima observations. The default is 'g+'.
+    xlimits : list, optional
+        [min_x,max_x]. x limits to plot. The default is [1,200].
+    ylimits : list, optional
+        [min_y,max_y]. y limits to plot. The default is [0,50].
+
+    Returns
+    -------
+    None.
+
+    """
     
     AMS_sort = AMS.sort_values(by=['AMS'])['AMS']
     plot_pos = np.arange(1,np.size(AMS_sort)+1)/(1+np.size(AMS_sort))
@@ -964,6 +1039,43 @@ def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],y
     plt.ylim(ylimits[0],ylimits[1])
 
 def TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,niter_smev,eT,iTs,qs = [0.99],obscol='r',valcol='b',xlimits = [-15,30],ylimits = [0.4,1000]):
+    """
+    Plots figure 5.
+
+    Parameters
+    ----------
+    P : numpy.ndarray
+        precipitation values
+    T : numpy.ndarray
+        temperature values 
+    P_mc : numpy.ndarray
+        Monte Carlo generated precipitation values.
+    T_mc : numpy.ndarray
+        Monte Carlo generated temperature values.
+    F_phat : numpy.ndarray
+        distribution values. F_phat = [kappa_0,b,lambda_0,a].
+    niter_smev : int
+        Number of iterations for uncertainty for the SMEV model .
+    eT : numpy.ndarray
+        x (temperature) values to produce distribution for magnitude model.
+    iTs : numpy.ndarray
+        x (temperature) values to produce distribution for quantile regression, binning, and TENAX.
+    qs : list
+        percentiles to calculate W.
+    obscol : string, optional
+        color code to plot observations. The default is 'r'.
+    valcol : string, optional
+        color code to plot model. The default is 'b'.
+    xlimits : list, optional
+        [min_x,max_x]. x limits to plot. The default is [-15,30].
+    ylimits : list, optional
+        [min_y,max_y]. y limits to plot. The default is [0.4,1000].
+
+    Returns
+    -------
+    None.
+
+    """
     percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
     scaling_rate = (np.exp(F_phat[3])-1)*100
     qhat = TNX_obs_scaling_rate(P,T,qs[0],niter_smev)
