@@ -571,11 +571,12 @@ class TENAX():
                                     ))
         
         # Generate P_mc if needed
+
         if n_mc == 0:
             P_mc = weibull_min.ppf(np.random.rand(self.n_monte_carlo), c=wbl_phat[:, 1], scale=wbl_phat[:, 0])
         else:
             P_mc = weibull_min.ppf(np.random.rand(n_mc), c=wbl_phat[:, 1], scale=wbl_phat[:, 0])
-    
+  
         vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05)
         
         ret_lev = SMEV_Mc_inversion(wbl_phat, n, self.return_period, vguess)
