@@ -543,8 +543,11 @@ class TENAX():
             
         return phat, loglik, loglik_H1, loglik_H0shape
    
-    def temperature_model(self, data_oe_temp):
-        beta = self.beta
+    def temperature_model(self, data_oe_temp, beta = 0):
+        if beta == 0:
+            beta = self.beta
+        else:
+            beta = beta
         
         mu, sigma = norm.fit(data_oe_temp)
         init_g = [mu, sigma]
@@ -837,7 +840,7 @@ def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess):
 
     return qnt
 
-def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',xlimits = [-15,30],ylimits = [0,0.06]):
+def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',obslabel = 'observations',vallabel = 'temperature model g(T)',xlimits = [-15,30],ylimits = [0,0.06]):
     """
     Plots the observational and model temperature pdf    
 
@@ -855,6 +858,10 @@ def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',xlimits = [-15
         color to plot observations. The default is 'r'.
     valcol : string, optional
         color to plot magnitude model. The default is 'b'.
+    obslabel : string, optional
+        Label for observations. The default is 'observations'.
+    vallabel : string, optional
+        Label for model plot. The default is 'temperature model g(T)'.
     xlimits : list, optional
         limits for the x axis [lower_x_limit, upper_x_limit]. The default is [-15,30].
     ylimits : list, optional
@@ -870,10 +877,10 @@ def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',xlimits = [-15
     # Plot empirical PDF of T
     eT_edges = np.concatenate([np.array([eT[0]-(eT[1]-eT[0])/2]),(eT + (eT[1]-eT[0])/2)]) #convert bin centres into bin edges
     hist, bin_edges = np.histogram(T, bins=eT_edges, density=True)
-    plt.plot(eT, hist, '--', color=obscol, label='observations')
+    plt.plot(eT, hist, '--', color=obscol, label=obslabel)
     
     # Plot analytical PDF of T (validation)
-    plt.plot(eT, gen_norm_pdf(eT, g_phat[0], g_phat[1], beta), '-', color=valcol, label='temperature model g(T)')
+    plt.plot(eT, gen_norm_pdf(eT, g_phat[0], g_phat[1], beta), '-', color=valcol, label=vallabel)
     
     # Set plot parameters
     #ax.set_xlim(Tlims)
@@ -937,14 +944,6 @@ def TNX_obs_scaling_rate(P,T,qs):
     qhat = model.fit(q=qs).params
     return qhat
 
-def temperature_model_free(beta, data_oe_temp): #this is the same as before just allows you to define beta... should probably change
-    
-    mu, sigma = norm.fit(data_oe_temp)
-    init_g = [mu, sigma]
-    
-    g_phat = minimize(lambda par: -gen_norm_loglik(data_oe_temp, par, beta), init_g, method='Nelder-Mead').x
-    
-    return g_phat
 
 
 
@@ -985,9 +984,15 @@ def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12
     percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
     plt.scatter(T,P,s=1,color=obscol,label = 'observations')
     plt.plot(eT,[thr]*np.size(eT),'--',alpha = 0.5,color = 'k',label = 'Left censoring threshold') #plot threshold
+    
+    #first one outside loop so can be in legend
     n=0
+    plt.plot(eT,percentile_lines[n],label = 'Magnitude model W(x,T)',color = valcol)
+    plt.text(eT[-1], percentile_lines[n][-1], str(qs[n]*100)+'th', ha='left', va='center')
+    n=1
     while n<np.size(qs):
-        plt.plot(eT,percentile_lines[n],label = str(qs[n]),color = valcol)
+        plt.plot(eT,percentile_lines[n],color = valcol) #,label = str(qs[n]),
+        plt.text(eT[-1], percentile_lines[n][-1], str(qs[n]*100)+'th', ha='left', va='center')
         n=n+1
 
     plt.legend()
@@ -1034,7 +1039,6 @@ def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],y
     plt.plot(eRP,AMS_sort,obscol_shape,label = 'Observed annual maxima') #plot observed return levels
     plt.xscale('log')
     plt.xlabel('return period (years)')
-    plt.ylabel('10-minute precipitation (mm)')
     plt.legend()
     plt.xlim(xlimits[0],xlimits[1])
     plt.ylim(ylimits[0],ylimits[1])
@@ -1074,12 +1078,13 @@ def TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,niter_smev,eT,iTs,qs = [0.99],obscol='r
 
     Returns
     -------
-    None.
+    scaling_rate : float
+        scaling rate of 
 
     """
     percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
     scaling_rate = (np.exp(F_phat[3])-1)*100
-    qhat = TNX_obs_scaling_rate(P,T,qs[0],niter_smev)
+    qhat = TNX_obs_scaling_rate(P,T,qs[0])
     
     
     plt.figure(figsize = (5,5))
@@ -1122,7 +1127,8 @@ def TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,niter_smev,eT,iTs,qs = [0.99],obscol='r
     plt.ylim(ylimits[0],ylimits[1])
     plt.xlim(xlimits[0],xlimits[1])
     plt.legend(title = str(qs[0]*100)+'th percentile lines computed by:')
-      
+    
+    return scaling_rate
 
 def all_bueno():
     print("d(・ᴗ・)")

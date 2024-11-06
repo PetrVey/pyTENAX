@@ -133,6 +133,7 @@ plt.show()
 #fig 4 (without SMEV and uncertainty) 
 AMS = dict_AMS['10'] # yet the annual maxima
 TNX_FIG_valid(AMS,S.return_period,RL)
+plt.ylabel('10-minute precipitation (mm)')
 plt.show()
 
 
@@ -151,8 +152,8 @@ T_winter = T[winter_inds]
 T_summer = T[summer_inds]
 
 
-g_phat_winter = temperature_model_free(2, T_winter)
-g_phat_summer = temperature_model_free(2, T_summer)
+g_phat_winter = S.temperature_model(T_winter,beta = 2)
+g_phat_summer = S.temperature_model(T_summer,beta = 2)
 
 
 winter_pdf = gen_norm_pdf(eT, g_phat_winter[0], g_phat_winter[1], 2)
