@@ -78,7 +78,7 @@ class TENAX():
                  min_ev_dur = 30,
                  separation = 24,
                  left_censoring = [0,1],
-                 niter_smev = 100,
+                 niter_smev = 100, #why is this here? 
                  niter_tnx = 100,
                  temp_res_monte_carlo = .001,
                  temp_delta = 10,

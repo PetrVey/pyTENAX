@@ -22,6 +22,8 @@ from pyTENAX.pyTENAX import *
 import time 
 import sys
 
+#import smev 
+from pyTENAX.smev_class import *
 
 S = TENAX(
         return_period = [2.33,5,10,20,30,50,100],
@@ -111,5 +113,23 @@ n = n_ordinary_per_year.sum() / len(n_ordinary_per_year)
 RL, _, __ = S.model_inversion(F_phat, g_phat, n, Ts)
 print(RL)
 
-
+# tENAX uncertainty
 F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(P, T, blocks_id, Ts)
+
+
+# SMEV and its uncertainty
+#TODO: clean this part cause it is a bit messy with namings
+S_SMEV = SMEV(threshold=0.1,
+              separation = 24,
+              return_period = S.return_period,
+              durations = S.durations,
+              time_resolution = 5, #time resolution in minutes
+              min_duration = 30 ,
+              left_censoring = [S.left_censoring[1],1])      
+
+#estimate shape and  scale parameters of weibull distribution
+smev_shape,smev_scale = S_SMEV.estimate_smev_parameters(P, S_SMEV.left_censoring)
+#estimate return period (quantiles) with SMEV
+smev_RL = S_SMEV.smev_return_values(S_SMEV.return_period, smev_shape, smev_scale, n.item())
+
+smev_RL_unc = S_SMEV.SMEV_bootstrap_uncertainty(P, blocks_id, S.niter_smev, n.item())
