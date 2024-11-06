@@ -24,7 +24,7 @@ import sys
 
 
 S = TENAX(
-        return_period = [2,5,10,20,50,100, 200],
+        return_period = [2.33,5,10,20,30,50,100],
         durations = [10, 60, 180, 360, 720, 1440],
         left_censoring = [0, 0.90],
     )
@@ -91,7 +91,7 @@ start_time = time.time()
 # Your data (P, T arrays) and threshold thr=3.8
 P = dict_ordinary["10"]["ordinary"].to_numpy() # Replace with your actual data
 T = dict_ordinary["10"]["T"].to_numpy()  # Replace with your actual data
-
+blocks_id = dict_ordinary["10"]["year"].to_numpy()  # Replace with your actual data
 
 
 # Number of threshold 
@@ -110,3 +110,6 @@ n = n_ordinary_per_year.sum() / len(n_ordinary_per_year)
 #estimates return levels using MC samples
 RL, _, __ = S.model_inversion(F_phat, g_phat, n, Ts)
 print(RL)
+
+
+F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(P, T, blocks_id, Ts)
