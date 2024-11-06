@@ -922,7 +922,7 @@ def inverse_magnitude_model(F_phat,eT,qs):
 
 def TNX_obs_scaling_rate(P,T,qs):
     """
-    calculate scaling rate for quantile regression
+    calculate quantile regression parameters.
 
     Parameters
     ----------
@@ -1003,7 +1003,7 @@ def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12
     
     
     
-def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],ylimits = [0,50]): #figure 4
+def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',TENAXlabel = 'The TENAX model',obslabel='Observed annual maxima',xlimits = [1,200],ylimits = [0,50]): #figure 4
     """
     Plots figure 4.
 
@@ -1019,6 +1019,11 @@ def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],y
         color for tenax line plot. The default is 'b'.
     obscol_shape : string, optional
         color and shape of annual maxima observations. The default is 'g+'.
+    TENAXlabel : string, optional
+        label for tenax in legend. The default is 'The TENAX model'.
+    obslabel : string, optional
+        label for annual maxima observations in legend . The default is 'Observed annual maxima'.
+        
     xlimits : list, optional
         [min_x,max_x]. x limits to plot. The default is [1,200].
     ylimits : list, optional
@@ -1035,8 +1040,8 @@ def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',xlimits = [1,200],y
     eRP = 1/(1-plot_pos)
     
     
-    plt.plot(RP,RL,color = TENAXcol, label = 'The TENAX model')  #plot calculated return levels
-    plt.plot(eRP,AMS_sort,obscol_shape,label = 'Observed annual maxima') #plot observed return levels
+    plt.plot(RP,RL,TENAXcol, label = TENAXlabel)  #plot calculated return levels
+    plt.plot(eRP,AMS_sort,obscol_shape,label = obslabel) #plot observed return levels
     plt.xscale('log')
     plt.xlabel('return period (years)')
     plt.legend()
@@ -1083,15 +1088,17 @@ def TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,niter_smev,eT,iTs,qs = [0.99],obscol='r
 
     """
     percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
-    scaling_rate = (np.exp(F_phat[3])-1)*100
-    qhat = TNX_obs_scaling_rate(P,T,qs[0])
+    scaling_rate_W = (np.exp(F_phat[3])-1)*100
     
+    #TODO: this doesn't seem quite right
+    qhat = TNX_obs_scaling_rate(P,T,qs[0])
+    scaling_rate_q = (np.exp(qhat[1])-1)*100
     
     plt.figure(figsize = (5,5))
     plt.scatter(T,P,s=1.5,color=obscol,alpha = 0.3,label = 'observations')
     plt.plot(iTs[0:-7],np.exp(qhat[0])*np.exp(iTs[0:-7]*qhat[1]),'--k',label = 'Quantile regression method')
     
-    ############################################################### PUT THIS ESLEWHERE    
+    ############################################################### PUT THIS ELSEWHERE    
     T_mc_bins = np.reshape(T_mc,[np.size(T),niter_smev])
     P_mc_bins = np.reshape(P_mc,[np.size(P),niter_smev])
     
@@ -1128,7 +1135,7 @@ def TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,niter_smev,eT,iTs,qs = [0.99],obscol='r
     plt.xlim(xlimits[0],xlimits[1])
     plt.legend(title = str(qs[0]*100)+'th percentile lines computed by:')
     
-    return scaling_rate
+    return scaling_rate_W, scaling_rate_q
 
 def all_bueno():
     print("d(・ᴗ・)")

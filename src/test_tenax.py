@@ -140,7 +140,8 @@ plt.show()
 #fig 5 
 iTs = np.arange(-2.5,37.5,1.5) #idk why we need a different T range here 
 
-TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,S.niter_smev,eT,iTs)
+scaling_rate_W, scaling_rate_q = TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,S.niter_smev,eT,iTs)
+plt.ylabel('10-minute precipitation (mm)')
 plt.show()
 
 #SPLITTING INTO SUMMER/WINTER
@@ -165,10 +166,11 @@ combined_pdf = (winter_pdf*np.size(T_winter)+summer_pdf*np.size(T_summer))/(np.s
 #fig 3
 
 
-TNX_FIG_temp_model(T=T_summer, g_phat=g_phat_summer,beta=2,eT=eT,obscol='r',valcol='r',xlimits = [-15,30],ylimits = [0,0.1])
-TNX_FIG_temp_model(T=T_winter, g_phat=g_phat_winter,beta=2,eT=eT,obscol='b',valcol='b',xlimits = [-15,30],ylimits = [0,0.1])
-TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT,obscol='k',valcol='k',xlimits = [-15,30],ylimits = [0,0.1])
+TNX_FIG_temp_model(T=T_summer, g_phat=g_phat_summer,beta=2,eT=eT,obscol='r',valcol='r',obslabel = None,vallabel = 'Summer',xlimits = [-15,30],ylimits = [0,0.1])
+TNX_FIG_temp_model(T=T_winter, g_phat=g_phat_winter,beta=2,eT=eT,obscol='b',valcol='b',obslabel = None,vallabel = 'Winter',xlimits = [-15,30],ylimits = [0,0.1])
+TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT,obscol='k',valcol='k',obslabel = None,vallabel = 'Annual',xlimits = [-15,30],ylimits = [0,0.1])
 plt.plot(eT,combined_pdf,'m',label = 'Combined summer and winter')
+plt.legend()
 plt.show()
 
 
@@ -226,14 +228,14 @@ RL2_predict, _,_ = S.model_inversion(F_phat1,g_phat2_predict,n2,Ts)
 
 #fig 7a
 
-TNX_FIG_temp_model(T=T1, g_phat=g_phat1,beta=4,eT=eT,obscol='b',valcol='b')
-TNX_FIG_temp_model(T=T2, g_phat=g_phat2_predict,beta=4,eT=eT,obscol='r',valcol='r') # model based on temp ave and std changes
+TNX_FIG_temp_model(T=T1, g_phat=g_phat1,beta=4,eT=eT,obscol='b',valcol='b',obslabel = None,vallabel = 'Temperature model '+str(yrs_unique[0])+'-'+str(midway))
+TNX_FIG_temp_model(T=T2, g_phat=g_phat2_predict,beta=4,eT=eT,obscol='r',valcol='r',obslabel = None,vallabel = 'Temperature model '+str(midway+1)+'-'+str(yrs_unique[-1])) # model based on temp ave and std changes
 plt.show() #this is slightly different in code and paper I think.. using predicted T vs fitted T
 
 #fig 7b
 
-TNX_FIG_valid(AMS1,S.return_period,RL1,TENAXcol='b',obscol_shape = 'b+')
-TNX_FIG_valid(AMS2,S.return_period,RL2_predict,TENAXcol='r',obscol_shape = 'r+')
+TNX_FIG_valid(AMS1,S.return_period,RL1,TENAXcol='b',obscol_shape = 'b+',TENAXlabel = 'The TENAX model '+str(yrs_unique[0])+'-'+str(midway),obslabel='Observed annual maxima '+str(yrs_unique[0])+'-'+str(midway))
+TNX_FIG_valid(AMS2,S.return_period,RL2_predict,TENAXcol='r',obscol_shape = 'r+',TENAXlabel = 'The predicted TENAX model '+str(midway+1)+'-'+str(yrs_unique[-1]),obslabel='Observed annual maxima '+str(midway+1)+'-'+str(yrs_unique[-1]))
 
 plt.show()
 
@@ -273,53 +275,63 @@ while i<np.size(delta_ns):
 
 
 #fig 6
-fig = plt.figure(figsize = (15,5))
+fig = plt.figure(figsize = (17,5))
 ax1 = fig.add_subplot(1,3,1)
 i = 0
-while i< np.size(delta_Ts):  
-    ax1.plot(S.return_period,T_sens[i],'k',alpha = 0.7,label = str(delta_Ts[i]))
-    
+while i< np.size(delta_Ts)-1:  
+    ax1.plot(S.return_period,T_sens[i],'k',alpha = 0.7)
+    plt.text(S.return_period[-1]+10, T_sens[i][-1], '{0:+}'.format(delta_Ts[i])+'°C', ha='left', va='center')
     i=i+1
+#plot last one differently
+ax1.plot(S.return_period,T_sens[i],'k',alpha = 0.7)
+plt.text(S.return_period[-3], T_sens[i][-1], 'μ\'=μ'+'{0:+}'.format(delta_Ts[i])+'°C', ha='left', va='center')   
+    
 plt.xscale('log')
 ax1.plot(S.return_period,RL,'b')
 ax1.set_title('Sensitivity to changes in mean temp')
-plt.legend()
 plt.xscale('log')
 plt.xlim(1,200)
-plt.ylim(0.60)
+plt.ylim(0,60)
 
 ax2 = fig.add_subplot(1,3,2)
 i = 0
-while i< np.size(delta_as):  
-    ax2.plot(S.return_period,as_sens[i],'k',alpha = 0.7,label = str(delta_as[i]))
-    
+while i< np.size(delta_as)-1:  
+    ax2.plot(S.return_period,as_sens[i],'k',alpha = 0.7)
+    plt.text(S.return_period[-1]+10, as_sens[i][-1], str(delta_as[i])+'σ', ha='left', va='center')
     i=i+1
+ax2.plot(S.return_period,as_sens[i],'k',alpha = 0.7)
+plt.text(S.return_period[-3]+20, as_sens[i][-1], 'σ\'='+str(delta_as[i])+'σ', ha='left', va='center')
+
+    
 plt.xscale('log')
 ax2.plot(S.return_period,RL,'b',label = 'The TENAX MODEL')
 ax2.set_title('Sensitivity to changes in temp std')
 plt.legend()
 plt.xscale('log')
 plt.xlim(1,200)
-plt.ylim(0.60)
+plt.ylim(0,60)
 
 ax3 = fig.add_subplot(1,3,3)
 i = 0
-while i< np.size(delta_ns):  
+while i< np.size(delta_ns)-1:  
     ax3.plot(S.return_period,n_sens[i],'k',alpha = 0.7,label = str(delta_ns[i]))
-    
+    plt.text(S.return_period[-1]+10, n_sens[i][-1], str(delta_ns[i])+'n', ha='left', va='center')
     i=i+1
+    
+ax3.plot(S.return_period,n_sens[i],'k',alpha = 0.7)
+plt.text(S.return_period[-3]+20, n_sens[i][-1], 'n\'='+str(delta_ns[i])+'n', ha='left', va='center')
+
 plt.xscale('log')
 ax3.plot(S.return_period,RL,'b')
 ax3.set_title('Sensitivity to changes in mean events per year (n)')
-plt.legend()
 plt.xscale('log')
 plt.xlim(1,200)
-plt.ylim(0.60)
+plt.ylim(0,60)
 
 
 
 plt.show()
 
-
+#TODO: n looks a litte different from in paper
 
 
