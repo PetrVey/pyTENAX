@@ -29,7 +29,6 @@ from scipy.stats import chi2
 from pyTENAX.smev_class import *
 
 S = TENAX(
-<<<<<<< HEAD
         return_period = [1.1,1.2,1.5,2,5,10,20,50,100, 200],  #for some reason it doesnt like calculating RP =<1
 
         durations = [10, 60, 180, 360, 720, 1440],
@@ -116,16 +115,20 @@ g_phat = S.temperature_model(T)
 # M is mean n of ordinary events
 n = n_ordinary_per_year.sum() / len(n_ordinary_per_year)  
 #estimates return levels using MC samples
-<<<<<<< HEAD
+
 RL, T_mc, P_mc = S.model_inversion(F_phat, g_phat, n, Ts,n_mc = np.size(P)*S.niter_smev) 
 print(RL)
 
 
 # tENAX uncertainty
+start_time = time.time()
 F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(P, T, blocks_id, Ts)
 
+elapsed_time = time.time() - start_time
+print(f"Time to do TENAX uncertainty: {elapsed_time:.4f} seconds")
 
 # SMEV and its uncertainty
+start_time = time.time()
 #TODO: clean this part cause it is a bit messy with namings
 S_SMEV = SMEV(threshold=0.1,
               separation = 24,
@@ -141,8 +144,10 @@ smev_shape,smev_scale = S_SMEV.estimate_smev_parameters(P, S_SMEV.left_censoring
 smev_RL = S_SMEV.smev_return_values(S_SMEV.return_period, smev_shape, smev_scale, n.item())
 
 smev_RL_unc = S_SMEV.SMEV_bootstrap_uncertainty(P, blocks_id, S.niter_smev, n.item())
->>>>>>> origin/main
 
+
+elapsed_time = time.time() - start_time
+print(f"Time to do SMEV and uncertainty: {elapsed_time:.4f} seconds")
 
 
 
@@ -153,15 +158,19 @@ eT = np.arange(np.min(T),np.max(T)+4,1) # define T values to calculate distribut
 # fig 2a
 qs = [.85,.95,.99,.999]
 TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs)
+plt.ylabel('10-minute precipitation (mm)')
+plt.title('fig 2a')
 plt.show()
 
 #fig 2b
 TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT)
+plt.title('fig 2b')
 plt.show()
 
-#fig 4 (without SMEV and uncertainty) 
+#fig 4 
 AMS = dict_AMS['10'] # yet the annual maxima
-TNX_FIG_valid(AMS,S.return_period,RL)
+TNX_FIG_valid(AMS,S.return_period,RL,smev_RL,RL_unc,smev_RL_unc)
+plt.title('fig 4')
 plt.ylabel('10-minute precipitation (mm)')
 plt.show()
 
@@ -170,6 +179,7 @@ plt.show()
 iTs = np.arange(-2.5,37.5,1.5) #idk why we need a different T range here 
 
 scaling_rate_W, scaling_rate_q = TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,S.niter_smev,eT,iTs)
+plt.title('fig 5')
 plt.ylabel('10-minute precipitation (mm)')
 plt.show()
 

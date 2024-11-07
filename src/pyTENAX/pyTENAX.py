@@ -1003,7 +1003,7 @@ def inverse_magnitude_model(F_phat,eT,qs):
    
     return percentile_lines
 
-def TNX_obs_scaling_rate(P,T,qs):
+def TNX_obs_scaling_rate(P,T,qs,niter):
     """
     calculate quantile regression parameters.
 
@@ -1025,7 +1025,14 @@ def TNX_obs_scaling_rate(P,T,qs):
     T = sm.add_constant(T)  # Add a constant (intercept) term
     model = sm.QuantReg(np.log(P), T)
     qhat = model.fit(q=qs).params
-    return qhat
+    
+    qhat_unc = np.zeros([2,niter])
+    for iter in np.arange(0,niter):
+        rr = np.random.randint(0, len(T), size=(niter))
+        model =sm.QuantReg(np.log(P[rr]),T[rr])
+        qhat_unc[:,iter] = model.fit(q=qs).params
+
+    return qhat, qhat_unc
 
 
 
@@ -1086,7 +1093,7 @@ def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12
     
     
     
-def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',TENAXlabel = 'The TENAX model',obslabel='Observed annual maxima',xlimits = [1,200],ylimits = [0,50]): #figure 4
+def TNX_FIG_valid(AMS,RP,RL,smev_RL=0,RL_unc=0,smev_RL_unc=0,TENAXcol='b',obscol_shape = 'g+',smev_colshape = '--r',TENAXlabel = 'The TENAX model',obslabel='Observed annual maxima',smevlabel = 'The SMEV model',alpha = 0.2,xlimits = [1,200],ylimits = [0,50]): #figure 4
     """
     Plots figure 4.
 
@@ -1121,10 +1128,26 @@ def TNX_FIG_valid(AMS,RP,RL,TENAXcol='b',obscol_shape = 'g+',TENAXlabel = 'The T
     AMS_sort = AMS.sort_values(by=['AMS'])['AMS']
     plot_pos = np.arange(1,np.size(AMS_sort)+1)/(1+np.size(AMS_sort))
     eRP = 1/(1-plot_pos)
+    if smev_RL != 0:
+        
+        #calculate uncertainty bounds. between 5% and 95%
+        RL_up = np.quantile(RL_unc, 0.95, axis=0)
+        RL_low = np.quantile(RL_unc, 0.05, axis=0)
+        smev_RL_up = np.quantile(smev_RL_unc, 0.95, axis=0)
+        smev_RL_low = np.quantile(smev_RL_unc, 0.05, axis=0)
+        
+        #plot uncertainties
+        plt.fill_between(RP, RL_low, RL_up, color=TENAXcol, alpha=alpha) #TENAX
+        plt.fill_between(RP, smev_RL_low, smev_RL_up, color=smev_colshape[-1], alpha=alpha) #SMEV
+        
     
-    
-    plt.plot(RP,RL,TENAXcol, label = TENAXlabel)  #plot calculated return levels
+    plt.plot(RP,RL,TENAXcol, label = TENAXlabel)  #plot TENAX return levels
     plt.plot(eRP,AMS_sort,obscol_shape,label = obslabel) #plot observed return levels
+    if smev_RL != 0:
+        plt.plot(RP,smev_RL,smev_colshape,label = smevlabel) #plot SMEV return lvls
+    
+    
+    
     plt.xscale('log')
     plt.xlabel('return period (years)')
     plt.legend()
@@ -1173,13 +1196,25 @@ def TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,niter_smev,eT,iTs,qs = [0.99],obscol='r
     percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
     scaling_rate_W = (np.exp(F_phat[3])-1)*100
     
-    #TODO: this doesn't seem quite right
-    qhat = TNX_obs_scaling_rate(P,T,qs[0])
+    #TODO: this doesn't seem quite right ... uncertainty is way off compared to paper
+    qhat,qhat_unc = TNX_obs_scaling_rate(P,T,qs[0],niter_smev)
     scaling_rate_q = (np.exp(qhat[1])-1)*100
+    
+    
+    #quantile regression uncertainties
+    q_reg_full_unc = np.zeros([len(iTs), niter_smev])
+    for i in np.arange(0,len(iTs)):
+        q_reg_full_unc[i,:] = np.exp(qhat_unc[0,:])*np.exp(iTs[i]*qhat_unc[1,:])
+    
+    q_up = np.quantile(q_reg_full_unc, 0.95, axis=1)
+    q_low = np.quantile(q_reg_full_unc, 0.05, axis=1)
     
     plt.figure(figsize = (5,5))
     plt.scatter(T,P,s=1.5,color=obscol,alpha = 0.3,label = 'observations')
-    plt.plot(iTs[0:-7],np.exp(qhat[0])*np.exp(iTs[0:-7]*qhat[1]),'--k',label = 'Quantile regression method')
+    plt.plot(iTs[0:-7],np.exp(qhat[0])*np.exp(iTs[0:-7]*qhat[1]),'--k',label = 'Quantile regression method') #need uncertainty on this too...
+    plt.fill_between(iTs[0:-7],q_low[0:-7],q_up[0:-7],color = 'k', alpha = 0.2) #quantile regression uncertainty
+    
+    
     
     ############################################################### PUT THIS ELSEWHERE    
     T_mc_bins = np.reshape(T_mc,[np.size(T),niter_smev])
@@ -1203,7 +1238,15 @@ def TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,niter_smev,eT,iTs,qs = [0.99],obscol='r
     qperc_obs_med = np.median(qperc_obs,axis=1)
     qperc_model_med = np.median(qperc_model,axis=1)
     
+    qperc_model_up = np.quantile(qperc_model, 0.95, axis=1)
+    qperc_model_low = np.quantile(qperc_model, 0.05, axis=1)
+    
     #####################################################################################
+    
+    #plot uncertainty
+    plt.fill_between(iTs[1:-6]+(iTs[2]-iTs[1])/2,qperc_model_low[1:-6],qperc_model_up[1:-6],color = 'm', alpha = 0.2) #TENAX
+    
+    
     
     plt.plot(iTs[1:-7]+(iTs[2]-iTs[1])/2,qperc_obs_med[1:-7],'-xr',label = 'Binning method') # don't really know why we cut off at the end like this
     plt.plot(iTs[1:-6]+(iTs[2]-iTs[1])/2,qperc_model_med[1:-6],'-om',label = 'The TENAX model')
