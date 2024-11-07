@@ -25,9 +25,13 @@ import matplotlib.pyplot as plt
 from scipy.stats import chi2
 
 
+#import smev 
+from pyTENAX.smev_class import *
 
 S = TENAX(
+<<<<<<< HEAD
         return_period = [1.1,1.2,1.5,2,5,10,20,50,100, 200],  #for some reason it doesnt like calculating RP =<1
+
         durations = [10, 60, 180, 360, 720, 1440],
         left_censoring = [0, 0.90],
         alpha = 0.05,
@@ -95,7 +99,7 @@ start_time = time.time()
 # Your data (P, T arrays) and threshold thr=3.8
 P = dict_ordinary["10"]["ordinary"].to_numpy() # Replace with your actual data
 T = dict_ordinary["10"]["T"].to_numpy()  # Replace with your actual data
-
+blocks_id = dict_ordinary["10"]["year"].to_numpy()  # Replace with your actual data
 
 
 # Number of threshold 
@@ -112,8 +116,33 @@ g_phat = S.temperature_model(T)
 # M is mean n of ordinary events
 n = n_ordinary_per_year.sum() / len(n_ordinary_per_year)  
 #estimates return levels using MC samples
+<<<<<<< HEAD
 RL, T_mc, P_mc = S.model_inversion(F_phat, g_phat, n, Ts,n_mc = np.size(P)*S.niter_smev) 
 print(RL)
+
+
+# tENAX uncertainty
+F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(P, T, blocks_id, Ts)
+
+
+# SMEV and its uncertainty
+#TODO: clean this part cause it is a bit messy with namings
+S_SMEV = SMEV(threshold=0.1,
+              separation = 24,
+              return_period = S.return_period,
+              durations = S.durations,
+              time_resolution = 5, #time resolution in minutes
+              min_duration = 30 ,
+              left_censoring = [S.left_censoring[1],1])      
+
+#estimate shape and  scale parameters of weibull distribution
+smev_shape,smev_scale = S_SMEV.estimate_smev_parameters(P, S_SMEV.left_censoring)
+#estimate return period (quantiles) with SMEV
+smev_RL = S_SMEV.smev_return_values(S_SMEV.return_period, smev_shape, smev_scale, n.item())
+
+smev_RL_unc = S_SMEV.SMEV_bootstrap_uncertainty(P, blocks_id, S.niter_smev, n.item())
+>>>>>>> origin/main
+
 
 
 
@@ -333,5 +362,6 @@ plt.ylim(0,60)
 plt.show()
 
 #TODO: n looks a litte different from in paper
+
 
 

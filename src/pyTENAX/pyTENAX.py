@@ -74,13 +74,13 @@ class TENAX():
                  durations,
                  beta=4, 
                  temp_time_hour = -24,
-                 alpha =0,
+                 alpha =0.05,
                  n_monte_carlo = int(2e4),
                  tolerance = 0.1,
                  min_ev_dur = 30,
                  separation = 24,
                  left_censoring = [0,1],
-                 niter_smev = 100,
+                 niter_smev = 100, #why is this here? 
                  niter_tnx = 100,
                  temp_res_monte_carlo = .001,
                  temp_delta = 10,
@@ -421,7 +421,7 @@ class TENAX():
                 ll_dates.append(ll_date)
                 
             #years  of ordinary events
-            ll_yrs=[arr_dates_oe[_,1].astype('datetime64[Y]').item().year for _ in range(arr_dates_oe.shape[0])]
+            ll_yrs=[arr_dates_oe[_,0].astype('datetime64[Y]').item().year for _ in range(arr_dates_oe.shape[0])]
             
             blocks = np.unique(ll_yrs)
            
@@ -586,7 +586,90 @@ class TENAX():
         
         return ret_lev, T_mc, P_mc
         
+    #uncerteinty TENAX MODEL HERE
+    def TNX_tenax_bootstrap_uncertainty(self, P, T, blocks_id, Ts):
+        """
+        Bootstrap uncertainty estimation for the TENAX model.
+
+        Parameters:
+        - P: numpy array of precipitation data.
+        - T: numpy array of temperature data.
+        - blocks_id: numpy array of block identifiers (e.g., years).
+        - perc_thres: percentile threshold for left-censoring.
+        - S: object containing model parameters and methods.
+        - RP: return periods (numpy array).
+        - N: number of Monte Carlo simulations.
+        - Ts: time scales (numpy array).
+        - niter: number of bootstrap iterations.
+
+        Returns:
+        - F_phat_unc: array of magnitude model parameters from bootstrap samples.
+        - g_phat_unc: array of temperature model parameters from bootstrap samples.
+        - RL_unc: array of estimated return levels from bootstrap samples.
+        - n_unc: array of mean number of events per block from bootstrap samples.
+        - n_err: number of iterations where the model fitting failed.
+        """
+
+        perc_thres = self.left_censoring[1]
+        niter = self.niter_tnx
+        RP = self.return_period
+        N = self.n_monte_carlo
         
+        blocks = np.unique(blocks_id)
+        M = len(blocks)
+        randy = np.random.randint(0, M, size=(M, niter))
+        
+
+        # Initialize variables
+        F_phat_unc = np.full((niter, 4), np.nan)
+        g_phat_unc = np.full((niter, 2), np.nan)
+        RL_unc = np.full((niter, len(RP)), np.nan)
+        n_unc = np.full(niter, np.nan)
+        n_err = 0
+
+        # Random sampling iterations
+        for ii in range(niter):
+            Pr = []
+            Tr = []
+            Bid = []
+
+            # Create bootstrapped data sample and corresponding 'fake' blocks id
+            for iy in range(M):
+                selected = blocks_id == blocks[randy[iy, ii]]
+                Pr.append(P[selected])
+                Tr.append(T[selected])
+                Bid.append(np.full(np.sum(selected), iy + 1))  # MATLAB indexing starts at 1
+
+            # Concatenate the resampled data
+            Pr = np.concatenate(Pr)
+            Tr = np.concatenate(Tr)
+            Bid = np.concatenate(Bid)
+
+            try:
+                # Left-censoring threshold
+                #TODO: double check on this, I think it should be from Pr not P
+                thr = np.quantile(P, perc_thres) 
+
+                # TENAX model components
+                # Magnitude model
+                F_phat_temporary, loglik_temp, _, _ = self.magnitude_model(Pr, Tr, thr)
+                # Temperature model
+                g_phat_temporary = self.temperature_model(Tr)
+                # Mean number of events per block
+                n_temporary = len(Pr) / M
+                # Estimate return levels using Monte Carlo samples
+                RL_temporary, _, _ = self.model_inversion(F_phat_temporary, g_phat_temporary, n_temporary, Ts)
+
+                # Store results
+                F_phat_unc[ii, :] = F_phat_temporary
+                g_phat_unc[ii, :] = g_phat_temporary
+                RL_unc[ii, :] = RL_temporary
+                n_unc[ii] = n_temporary
+            except Exception as err:
+                n_err += 1
+
+        return F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err
+    
         
 def wbl_leftcensor_loglik(theta, x, t, thr):
     """
