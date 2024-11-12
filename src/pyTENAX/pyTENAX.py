@@ -793,7 +793,13 @@ def gen_norm_loglik(x, par, beta):
     sigma = par[1]
     
     # Compute the log-likelihood
-    loglik = np.sum(np.log(gen_norm_pdf(x, mu, sigma, beta)))
+    pdf = gen_norm_pdf(x, mu, sigma, beta)
+    n = len(pdf[pdf==0])
+    if n>5:
+        print("warning: "+n+" zero values")
+        
+    pdf[pdf==0] = 1e-10 #stops issue if zero generated
+    loglik = np.sum(np.log(pdf))
     
     return loglik
 
@@ -1093,7 +1099,7 @@ def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12
     
     
     
-def TNX_FIG_valid(AMS,RP,RL,smev_RL=0,RL_unc=0,smev_RL_unc=0,TENAXcol='b',obscol_shape = 'g+',smev_colshape = '--r',TENAXlabel = 'The TENAX model',obslabel='Observed annual maxima',smevlabel = 'The SMEV model',alpha = 0.2,xlimits = [1,200],ylimits = [0,50]): #figure 4
+def TNX_FIG_valid(AMS,RP,RL,smev_RL=[],RL_unc=0,smev_RL_unc=0,TENAXcol='b',obscol_shape = 'g+',smev_colshape = '--r',TENAXlabel = 'The TENAX model',obslabel='Observed annual maxima',smevlabel = 'The SMEV model',alpha = 0.2,xlimits = [1,200],ylimits = [0,50]): #figure 4
     """
     Plots figure 4.
 
@@ -1128,7 +1134,7 @@ def TNX_FIG_valid(AMS,RP,RL,smev_RL=0,RL_unc=0,smev_RL_unc=0,TENAXcol='b',obscol
     AMS_sort = AMS.sort_values(by=['AMS'])['AMS']
     plot_pos = np.arange(1,np.size(AMS_sort)+1)/(1+np.size(AMS_sort))
     eRP = 1/(1-plot_pos)
-    if smev_RL != 0:
+    if np.size(smev_RL) != 0:
         
         #calculate uncertainty bounds. between 5% and 95%
         RL_up = np.quantile(RL_unc, 0.95, axis=0)
@@ -1143,7 +1149,7 @@ def TNX_FIG_valid(AMS,RP,RL,smev_RL=0,RL_unc=0,smev_RL_unc=0,TENAXcol='b',obscol
     
     plt.plot(RP,RL,TENAXcol, label = TENAXlabel)  #plot TENAX return levels
     plt.plot(eRP,AMS_sort,obscol_shape,label = obslabel) #plot observed return levels
-    if smev_RL != 0:
+    if np.size(smev_RL) != 0:
         plt.plot(RP,smev_RL,smev_colshape,label = smevlabel) #plot SMEV return lvls
     
     

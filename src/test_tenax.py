@@ -10,6 +10,7 @@ import os
 from os.path import dirname, abspath, join
 from os import getcwd
 import sys
+
 #run this fro src folder, otherwise it doesn't work
 THIS_DIR = dirname(getcwd())
 CODE_DIR = join(THIS_DIR, 'src')
