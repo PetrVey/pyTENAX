@@ -556,33 +556,38 @@ class TENAX():
         
         return g_phat
     
-    def model_inversion(self, F_phat, g_phat, n, Ts, n_mc=0):
-        
+    def model_inversion(self, F_phat, g_phat, n, Ts, gen_P_mc = False,gen_RL=True):
+        P_mc = []
+        ret_lev = []
         pdf_values = gen_norm_pdf(Ts, g_phat[0], g_phat[1], self.beta)
         df = np.vstack([pdf_values, Ts])
 
         # Generates random T values according to the temperature model
-        if n_mc == 0:
-            T_mc = randdf(self.n_monte_carlo, df, 'pdf').T              
-        else:
-            T_mc = randdf(n_mc, df, 'pdf').T
-        
+        T_mc = randdf(self.n_monte_carlo, df, 'pdf').T              
+       
         # Generates random P according to the magnitude model
         wbl_phat = np.column_stack((
                                     F_phat[2] * np.exp(F_phat[3] * T_mc),
                                     F_phat[0] + F_phat[1] * T_mc
                                     ))
-        
-        # Generate P_mc if needed
 
-        if n_mc == 0:
-            P_mc = weibull_min.ppf(np.random.rand(self.n_monte_carlo), c=wbl_phat[:, 1], scale=wbl_phat[:, 0])
-        else:
-            P_mc = weibull_min.ppf(np.random.rand(n_mc), c=wbl_phat[:, 1], scale=wbl_phat[:, 0])
-  
+       
         vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05)
         
-        ret_lev = SMEV_Mc_inversion(wbl_phat, n, self.return_period, vguess)
+        if gen_RL:
+            ret_lev = SMEV_Mc_inversion(wbl_phat, n, self.return_period, vguess)
+        else:
+            pass
+                
+        # Generate P_mc if needed
+        if gen_P_mc:
+            start = time.time()
+            P_mc = weibull_min.ppf(np.random.rand(self.n_monte_carlo), c=wbl_phat[:, 1], scale=wbl_phat[:, 0])
+            end = time.time() - start
+            print(f'mc {self.n_monte_carlo}: {end}')
+            
+        else:
+            pass
         
         return ret_lev, T_mc, P_mc
         
@@ -613,7 +618,6 @@ class TENAX():
         perc_thres = self.left_censoring[1]
         niter = self.niter_tnx
         RP = self.return_period
-        N = self.n_monte_carlo
         
         blocks = np.unique(blocks_id)
         M = len(blocks)
@@ -658,7 +662,9 @@ class TENAX():
                 # Mean number of events per block
                 n_temporary = len(Pr) / M
                 # Estimate return levels using Monte Carlo samples
-                RL_temporary, _, _ = self.model_inversion(F_phat_temporary, g_phat_temporary, n_temporary, Ts)
+                #TODO: check this cause it is slow...
+                RL_temporary, _, _ = self.model_inversion(F_phat_temporary, g_phat_temporary, 
+                                                          n_temporary, Ts, )
 
                 # Store results
                 F_phat_unc[ii, :] = F_phat_temporary

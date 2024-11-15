@@ -117,9 +117,13 @@ g_phat = S.temperature_model(T)
 n = n_ordinary_per_year.sum() / len(n_ordinary_per_year)  
 #estimates return levels using MC samples
 
-RL, T_mc, P_mc = S.model_inversion(F_phat, g_phat, n, Ts,n_mc = np.size(P)*S.niter_smev) 
+
+RL, _, P_check = S.model_inversion(F_phat, g_phat, n, Ts) 
 print(RL)
 
+start_time = time.time()
+
+S.n_monte_carlo = 20000
 
 # tENAX uncertainty
 start_time = time.time()
@@ -164,7 +168,7 @@ plt.title('fig 2a')
 plt.show()
 
 #fig 2b
-TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT)
+TNX_FIG_temp_model(T, g_phat,S.beta,eT)
 plt.title('fig 2b')
 plt.show()
 
@@ -178,7 +182,11 @@ plt.show()
 
 #fig 5 
 iTs = np.arange(-2.5,37.5,1.5) #idk why we need a different T range here 
-
+S.n_monte_carlo = np.size(P)*S.niter_smev
+_, T_mc, P_mc = S.model_inversion(F_phat, g_phat, n, Ts,gen_P_mc = True,gen_RL=False) 
+elapsed_time = time.time() - start_time
+# Print the elapsed time
+print(f"Elapsed time model_inversion all: {elapsed_time:.4f} seconds")
 scaling_rate_W, scaling_rate_q = TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,S.niter_smev,eT,iTs)
 plt.title('fig 5')
 plt.ylabel('10-minute precipitation (mm)')
@@ -239,10 +247,11 @@ g_phat2 = S.temperature_model(T2)
 
 
 F_phat1, loglik1, _, _ = S.magnitude_model(P1, T1, thr)
-RL1, T_mc1, P_mc1 = S.model_inversion(F_phat1, g_phat1, n1, Ts,n_mc = np.size(P1)*S.niter_smev)
+RL1, _, _ = S.model_inversion(F_phat1, g_phat1, n1, Ts)
    
+
 F_phat2, loglik2, _, _ = S.magnitude_model(P2, T2, thr)
-RL2, T_mc2, P_mc2 = S.model_inversion(F_phat2, g_phat2, n2, Ts,n_mc = np.size(P2)*S.niter_smev)   
+RL2, _, _ = S.model_inversion(F_phat2, g_phat2, n2, Ts)   
 
 if F_phat[2]==0:
     dof=3
@@ -257,6 +266,10 @@ else:
 #check magnitude model the same in both periods
 lambda_LR = -2*( loglik - (loglik1+loglik2) )
 pval = chi2.sf(lambda_LR, dof)
+if pval > S.alpha:
+    print(f"p={pval}. Magnitude models not  different at {S.alpha*100}% significance.")
+else:
+    print(f"p={pval}. Magnitude models are different at {S.alpha*100}% significance.")
 
 #modelling second model based on first magnitude and changes in mean/std
 mu_delta = np.mean(T2)-np.mean(T1)
