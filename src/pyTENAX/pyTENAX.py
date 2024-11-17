@@ -14,6 +14,7 @@ from scipy.optimize import root_scalar
 import time
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
+from packaging.version import parse
 
 class TENAX():
     """
@@ -174,7 +175,10 @@ class TENAX():
         # Step 1: get resolution of dataset (MUST BE SAME in whole dataset!!!)
         time_res = (data_pr.index[-1] - data_pr.index[-2]).total_seconds()/60
         # Step 2: Resample by year and count total and NaN values
-        yearly_valid = data_pr.resample('Y').apply(lambda x: x.notna().sum())  # Count not NaNs per year
+        if parse(pd.__version__) > parse("2.2"):
+            yearly_valid = data_pr.resample('YE').apply(lambda x: x.notna().sum())  # Count not NaNs per year
+        else: 
+            yearly_valid = data_pr.resample('Y').apply(lambda x: x.notna().sum())  # Count not NaNs per year
         # Step 3: Estimate expected lenght of yearly timeseries
         expected = pd.DataFrame(index = yearly_valid.index)
         expected["Total"] = 1440/time_res*365
