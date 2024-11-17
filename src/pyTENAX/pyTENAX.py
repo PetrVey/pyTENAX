@@ -12,6 +12,9 @@ from scipy.special import gamma
 from scipy.stats import norm
 from scipy.optimize import root_scalar
 import time
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+from packaging.version import parse
 
 class TENAX():
     """
@@ -172,7 +175,10 @@ class TENAX():
         # Step 1: get resolution of dataset (MUST BE SAME in whole dataset!!!)
         time_res = (data_pr.index[-1] - data_pr.index[-2]).total_seconds()/60
         # Step 2: Resample by year and count total and NaN values
-        yearly_valid = data_pr.resample('Y').apply(lambda x: x.notna().sum())  # Count not NaNs per year
+        if parse(pd.__version__) > parse("2.2"):
+            yearly_valid = data_pr.resample('YE').apply(lambda x: x.notna().sum())  # Count not NaNs per year
+        else: 
+            yearly_valid = data_pr.resample('Y').apply(lambda x: x.notna().sum())  # Count not NaNs per year
         # Step 3: Estimate expected lenght of yearly timeseries
         expected = pd.DataFrame(index = yearly_valid.index)
         expected["Total"] = 1440/time_res*365
@@ -541,8 +547,11 @@ class TENAX():
             
         return phat, loglik, loglik_H1, loglik_H0shape
    
-    def temperature_model(self, data_oe_temp):
-        beta = self.beta
+    def temperature_model(self, data_oe_temp, beta = 0):
+        if beta == 0:
+            beta = self.beta
+        else:
+            beta = beta
         
         mu, sigma = norm.fit(data_oe_temp)
         init_g = [mu, sigma]
@@ -551,26 +560,38 @@ class TENAX():
         
         return g_phat
     
-    def model_inversion(self, F_phat, g_phat, n, Ts):
-        
+    def model_inversion(self, F_phat, g_phat, n, Ts, gen_P_mc = False,gen_RL=True):
+        P_mc = []
+        ret_lev = []
         pdf_values = gen_norm_pdf(Ts, g_phat[0], g_phat[1], self.beta)
         df = np.vstack([pdf_values, Ts])
 
         # Generates random T values according to the temperature model
-        T_mc = randdf(self.n_monte_carlo, df, 'pdf').T 
-        
+        T_mc = randdf(self.n_monte_carlo, df, 'pdf').T              
+       
         # Generates random P according to the magnitude model
         wbl_phat = np.column_stack((
                                     F_phat[2] * np.exp(F_phat[3] * T_mc),
                                     F_phat[0] + F_phat[1] * T_mc
                                     ))
-        
-        # Generate P_mc if needed
-        P_mc = weibull_min.ppf(np.random.rand(self.n_monte_carlo), c=wbl_phat[:, 1], scale=wbl_phat[:, 0])
-    
+
+       
         vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05)
         
-        ret_lev = SMEV_Mc_inversion(wbl_phat, n, self.return_period, vguess)
+        if gen_RL:
+            ret_lev = SMEV_Mc_inversion(wbl_phat, n, self.return_period, vguess)
+        else:
+            pass
+                
+        # Generate P_mc if needed
+        if gen_P_mc:
+            start = time.time()
+            P_mc = weibull_min.ppf(np.random.rand(self.n_monte_carlo), c=wbl_phat[:, 1], scale=wbl_phat[:, 0])
+            end = time.time() - start
+            print(f'mc {self.n_monte_carlo}: {end}')
+            
+        else:
+            pass
         
         return ret_lev, T_mc, P_mc
         
@@ -601,7 +622,6 @@ class TENAX():
         perc_thres = self.left_censoring[1]
         niter = self.niter_tnx
         RP = self.return_period
-        N = self.n_monte_carlo
         
         blocks = np.unique(blocks_id)
         M = len(blocks)
@@ -646,7 +666,9 @@ class TENAX():
                 # Mean number of events per block
                 n_temporary = len(Pr) / M
                 # Estimate return levels using Monte Carlo samples
-                RL_temporary, _, _ = self.model_inversion(F_phat_temporary, g_phat_temporary, n_temporary, Ts)
+                #TODO: check this cause it is slow...
+                RL_temporary, _, _ = self.model_inversion(F_phat_temporary, g_phat_temporary, 
+                                                          n_temporary, Ts, )
 
                 # Store results
                 F_phat_unc[ii, :] = F_phat_temporary
@@ -781,7 +803,13 @@ def gen_norm_loglik(x, par, beta):
     sigma = par[1]
     
     # Compute the log-likelihood
-    loglik = np.sum(np.log(gen_norm_pdf(x, mu, sigma, beta)))
+    pdf = gen_norm_pdf(x, mu, sigma, beta)
+    n = len(pdf[pdf==0])
+    if n>5:
+        print("warning: "+n+" zero values")
+        
+    pdf[pdf==0] = 1e-10 #stops issue if zero generated
+    loglik = np.sum(np.log(pdf))
     
     return loglik
 
@@ -911,6 +939,345 @@ def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess):
 
     return qnt
 
+def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',obslabel = 'observations',vallabel = 'temperature model g(T)',xlimits = [-15,30],ylimits = [0,0.06]):
+    """
+    Plots the observational and model temperature pdf    
+
+    Parameters
+    ----------
+    T : numpy.ndarray
+        Array of observed temperatures.
+    g_phat : numpy.ndarray
+        [mu, sigma] of temperature distribution.
+    beta : float
+        value of beta in generalised normal distribution.
+    eT : numpy.ndarray
+        x (temperature) values to produce distribution.
+    obscol : string, optional
+        color to plot observations. The default is 'r'.
+    valcol : string, optional
+        color to plot magnitude model. The default is 'b'.
+    obslabel : string, optional
+        Label for observations. The default is 'observations'.
+    vallabel : string, optional
+        Label for model plot. The default is 'temperature model g(T)'.
+    xlimits : list, optional
+        limits for the x axis [lower_x_limit, upper_x_limit]. The default is [-15,30].
+    ylimits : list, optional
+        limits for the y axis [lower_y_limit, upper_y_limit]. The default is [0,0.06].
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    
+    # Plot empirical PDF of T
+    eT_edges = np.concatenate([np.array([eT[0]-(eT[1]-eT[0])/2]),(eT + (eT[1]-eT[0])/2)]) #convert bin centres into bin edges
+    hist, bin_edges = np.histogram(T, bins=eT_edges, density=True)
+    plt.plot(eT, hist, '--', color=obscol, label=obslabel)
+    
+    # Plot analytical PDF of T (validation)
+    plt.plot(eT, gen_norm_pdf(eT, g_phat[0], g_phat[1], beta), '-', color=valcol, label=vallabel)
+    
+    # Set plot parameters
+    #ax.set_xlim(Tlims)
+    plt.xlabel('T [°C]',fontsize=14)
+    plt.ylabel('pdf',fontsize=14)
+    plt.ylim(ylimits[0],ylimits[1])
+    plt.xlim(xlimits[0],xlimits[1])
+    plt.legend(fontsize=8) #NEED TO SET LOCATION OF THIS, maybe fontsize is too small as well
+    plt.tick_params(axis='both', which='major', labelsize=14)
+    
+    
+def inverse_magnitude_model(F_phat,eT,qs):
+    """
+    Calculate percentiles from the Weibell magnitude model
+
+    Parameters
+    ----------
+    F_phat : numpy.ndarray
+        distribution values. F_phat = [kappa_0,b,lambda_0,a].
+    x : numpy.ndarray
+        x (temperature) values from which to produce distribution.
+    qs : list
+        list of percentiles to calculate (between 0 and 1). e.g. [0.85,0.95,0.99].
+
+    Returns
+    -------
+    percentile_lines : numpy.ndarray
+        array with shape length(qs) by length(eT) giving the magnitudes for each eT. percentile_lines[0] are the values for qs[0].  
+
+    """
+    
+    percentile_lines = np.zeros((len(qs), len(eT)))
+    for iq, q in enumerate(qs):
+        
+        
+        percentile_lines[iq,:] = F_phat[2]*np.exp(F_phat[3] * eT)*(-np.log(1-q))**(1/(F_phat[0]+F_phat[1]*eT))
+   
+    return percentile_lines
+
+def TNX_obs_scaling_rate(P,T,qs,niter):
+    """
+    calculate quantile regression parameters.
+
+    Parameters
+    ----------
+    P : numpy.ndarray
+        precipitation values
+    T : numpy.ndarray
+        temperature values
+    qs : float
+        percentile.
+
+    Returns
+    -------
+    qhat : numpy.ndarray
+        [something, scaling rate].
+
+    """
+    T = sm.add_constant(T)  # Add a constant (intercept) term
+    model = sm.QuantReg(np.log(P), T)
+    qhat = model.fit(q=qs).params
+    
+    qhat_unc = np.zeros([2,niter])
+    for iter in np.arange(0,niter):
+        rr = np.random.randint(0, len(T), size=(niter))
+        model =sm.QuantReg(np.log(P[rr]),T[rr])
+        qhat_unc[:,iter] = model.fit(q=qs).params
+
+    return qhat, qhat_unc
+
+
+
+
+def TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs,obscol='r',valcol='b',xlimits = [-12,30],ylimits = [0.1,1000]):
+    """
+    Plots figure 2a. the observed T-P pairs and the W model percentiles.
+
+    Parameters
+    ----------
+    P : numpy.ndarray
+        precipitation values
+    T : numpy.ndarray
+        temperature values 
+    F_phat : numpy.ndarray
+        distribution values. F_phat = [kappa_0,b,lambda_0,a]..
+    thr : float
+        precipitation threshold for the left-censoring.
+    eT : numpy.ndarray
+        x values to plot W model.
+    qs : list
+        percentiles to calculate W.
+    obscol : string, optional
+        color code to plot observations. The default is 'r'.
+    valcol : string, optional
+        color code to plot model. The default is 'b'.
+    xlimits : list, optional
+        [min_x,max_x]. x limits to plot. The default is [-12,30].
+    ylimits : list, optional
+        [min_y,max_y]. y limits to plot. The default is [0.1,1000].
+
+    Returns
+    -------
+    None.
+
+    """
+    # TO DO: documentation, adjustable axes, line labels instead of legend, axis labels
+    
+    percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
+    plt.scatter(T,P,s=1,color=obscol,label = 'observations')
+    plt.plot(eT,[thr]*np.size(eT),'--',alpha = 0.5,color = 'k',label = 'Left censoring threshold') #plot threshold
+    
+    #first one outside loop so can be in legend
+    n=0
+    plt.plot(eT,percentile_lines[n],label = 'Magnitude model W(x,T)',color = valcol)
+    plt.text(eT[-1], percentile_lines[n][-1], str(qs[n]*100)+'th', ha='left', va='center')
+    n=1
+    while n<np.size(qs):
+        plt.plot(eT,percentile_lines[n],color = valcol) #,label = str(qs[n]),
+        plt.text(eT[-1], percentile_lines[n][-1], str(qs[n]*100)+'th', ha='left', va='center')
+        n=n+1
+
+    plt.legend()
+    plt.yscale('log')
+    plt.ylim(ylimits[0],ylimits[1])
+    plt.xlim(xlimits[0],xlimits[1])
+    plt.xlabel('T [°C]')
+    
+    
+    
+def TNX_FIG_valid(AMS,RP,RL,smev_RL=[],RL_unc=0,smev_RL_unc=0,TENAXcol='b',obscol_shape = 'g+',smev_colshape = '--r',TENAXlabel = 'The TENAX model',obslabel='Observed annual maxima',smevlabel = 'The SMEV model',alpha = 0.2,xlimits = [1,200],ylimits = [0,50]): #figure 4
+    """
+    Plots figure 4.
+
+    Parameters
+    ----------
+    AMS : pandas.core.frame.DataFrame
+        Annual maxima.
+    RP : list
+        return periods to plot.
+    RL : numpy.ndarray
+        return levels calculated by TENAX.
+    TENAXcol : string, optional
+        color for tenax line plot. The default is 'b'.
+    obscol_shape : string, optional
+        color and shape of annual maxima observations. The default is 'g+'.
+    TENAXlabel : string, optional
+        label for tenax in legend. The default is 'The TENAX model'.
+    obslabel : string, optional
+        label for annual maxima observations in legend . The default is 'Observed annual maxima'.
+        
+    xlimits : list, optional
+        [min_x,max_x]. x limits to plot. The default is [1,200].
+    ylimits : list, optional
+        [min_y,max_y]. y limits to plot. The default is [0,50].
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    AMS_sort = AMS.sort_values(by=['AMS'])['AMS']
+    plot_pos = np.arange(1,np.size(AMS_sort)+1)/(1+np.size(AMS_sort))
+    eRP = 1/(1-plot_pos)
+    if np.size(smev_RL) != 0:
+        
+        #calculate uncertainty bounds. between 5% and 95%
+        RL_up = np.quantile(RL_unc, 0.95, axis=0)
+        RL_low = np.quantile(RL_unc, 0.05, axis=0)
+        smev_RL_up = np.quantile(smev_RL_unc, 0.95, axis=0)
+        smev_RL_low = np.quantile(smev_RL_unc, 0.05, axis=0)
+        
+        #plot uncertainties
+        plt.fill_between(RP, RL_low, RL_up, color=TENAXcol, alpha=alpha) #TENAX
+        plt.fill_between(RP, smev_RL_low, smev_RL_up, color=smev_colshape[-1], alpha=alpha) #SMEV
+        
+    
+    plt.plot(RP,RL,TENAXcol, label = TENAXlabel)  #plot TENAX return levels
+    plt.plot(eRP,AMS_sort,obscol_shape,label = obslabel) #plot observed return levels
+    if np.size(smev_RL) != 0:
+        plt.plot(RP,smev_RL,smev_colshape,label = smevlabel) #plot SMEV return lvls
+    
+    
+    
+    plt.xscale('log')
+    plt.xlabel('return period (years)')
+    plt.legend()
+    plt.xlim(xlimits[0],xlimits[1])
+    plt.ylim(ylimits[0],ylimits[1])
+
+def TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,niter_smev,eT,iTs,qs = [0.99],obscol='r',valcol='b',xlimits = [-15,30],ylimits = [0.4,1000]):
+    """
+    Plots figure 5.
+
+    Parameters
+    ----------
+    P : numpy.ndarray
+        precipitation values
+    T : numpy.ndarray
+        temperature values 
+    P_mc : numpy.ndarray
+        Monte Carlo generated precipitation values.
+    T_mc : numpy.ndarray
+        Monte Carlo generated temperature values.
+    F_phat : numpy.ndarray
+        distribution values. F_phat = [kappa_0,b,lambda_0,a].
+    niter_smev : int
+        Number of iterations for uncertainty for the SMEV model .
+    eT : numpy.ndarray
+        x (temperature) values to produce distribution for magnitude model.
+    iTs : numpy.ndarray
+        x (temperature) values to produce distribution for quantile regression, binning, and TENAX.
+    qs : list
+        percentiles to calculate W.
+    obscol : string, optional
+        color code to plot observations. The default is 'r'.
+    valcol : string, optional
+        color code to plot model. The default is 'b'.
+    xlimits : list, optional
+        [min_x,max_x]. x limits to plot. The default is [-15,30].
+    ylimits : list, optional
+        [min_y,max_y]. y limits to plot. The default is [0.4,1000].
+
+    Returns
+    -------
+    scaling_rate : float
+        scaling rate of 
+
+    """
+    percentile_lines = inverse_magnitude_model(F_phat,eT,qs)
+    scaling_rate_W = (np.exp(F_phat[3])-1)*100
+    
+    #TODO: this doesn't seem quite right ... uncertainty is way off compared to paper
+    qhat,qhat_unc = TNX_obs_scaling_rate(P,T,qs[0],niter_smev)
+    scaling_rate_q = (np.exp(qhat[1])-1)*100
+    
+    
+    #quantile regression uncertainties
+    q_reg_full_unc = np.zeros([len(iTs), niter_smev])
+    for i in np.arange(0,len(iTs)):
+        q_reg_full_unc[i,:] = np.exp(qhat_unc[0,:])*np.exp(iTs[i]*qhat_unc[1,:])
+    
+    q_up = np.quantile(q_reg_full_unc, 0.95, axis=1)
+    q_low = np.quantile(q_reg_full_unc, 0.05, axis=1)
+    
+    plt.figure(figsize = (5,5))
+    plt.scatter(T,P,s=1.5,color=obscol,alpha = 0.3,label = 'observations')
+    plt.plot(iTs[0:-7],np.exp(qhat[0])*np.exp(iTs[0:-7]*qhat[1]),'--k',label = 'Quantile regression method') #need uncertainty on this too...
+    plt.fill_between(iTs[0:-7],q_low[0:-7],q_up[0:-7],color = 'k', alpha = 0.2) #quantile regression uncertainty
+    
+    
+    
+    ############################################################### PUT THIS ELSEWHERE    
+    T_mc_bins = np.reshape(T_mc,[np.size(T),niter_smev])
+    P_mc_bins = np.reshape(P_mc,[np.size(P),niter_smev])
+    
+    qperc_model = np.zeros([np.size(iTs),niter_smev])
+    qperc_obs = np.zeros([np.size(iTs),niter_smev])
+    
+    
+    for nit in range(niter_smev):
+        for i in range(np.size(iTs)-1):
+            tmpP = P_mc_bins[:, nit]
+            mask_model = (T_mc_bins[:, nit] > iTs[i]) & (T_mc_bins[:, nit] <= iTs[i + 1])
+            if np.any(mask_model):
+                qperc_model[i, nit] = np.quantile(tmpP[mask_model], qs[0]) # binning monte carlos to get TENAX model
+                
+            mask_obs = (T > iTs[i]) & (T <= iTs[i + 1])
+            if np.any(mask_obs):
+                qperc_obs[i] = np.quantile(P[mask_obs], qs[0]) #binning observations
+            
+    qperc_obs_med = np.median(qperc_obs,axis=1)
+    qperc_model_med = np.median(qperc_model,axis=1)
+    
+    qperc_model_up = np.quantile(qperc_model, 0.95, axis=1)
+    qperc_model_low = np.quantile(qperc_model, 0.05, axis=1)
+    
+    #####################################################################################
+    
+    #plot uncertainty
+    plt.fill_between(iTs[1:-6]+(iTs[2]-iTs[1])/2,qperc_model_low[1:-6],qperc_model_up[1:-6],color = 'm', alpha = 0.2) #TENAX
+    
+    
+    
+    plt.plot(iTs[1:-7]+(iTs[2]-iTs[1])/2,qperc_obs_med[1:-7],'-xr',label = 'Binning method') # don't really know why we cut off at the end like this
+    plt.plot(iTs[1:-6]+(iTs[2]-iTs[1])/2,qperc_model_med[1:-6],'-om',label = 'The TENAX model')
+    
+    n=0
+    while n<np.size(qs):
+        plt.plot(eT,percentile_lines[n],color = valcol,label = 'Magnitude model W(x,T)')
+        n=n+1
+
+    plt.yscale('log')
+    plt.ylim(ylimits[0],ylimits[1])
+    plt.xlim(xlimits[0],xlimits[1])
+    plt.legend(title = str(qs[0]*100)+'th percentile lines computed by:')
+    
+    return scaling_rate_W, scaling_rate_q
 
 def all_bueno():
     print("d(・ᴗ・)")
