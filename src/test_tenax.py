@@ -30,7 +30,7 @@ from scipy.stats import chi2
 from pyTENAX.smev_class import *
 
 S = TENAX(
-        return_period = [1.1,1.2,1.5,2,5,10,20,50,100, 200],  #for some reason it doesnt like calculating RP =<1
+        return_period = [2,5,10,20,50,100, 200],  #for some reason it doesnt like calculating RP =<1
 
         durations = [10, 60, 180, 360, 720, 1440],
         left_censoring = [0, 0.90],
@@ -120,6 +120,11 @@ n = n_ordinary_per_year.sum() / len(n_ordinary_per_year)
 
 RL, _, P_check = S.model_inversion(F_phat, g_phat, n, Ts) 
 print(RL)
+elapsed_time = time.time() - start_time
+# Print the elapsed time
+print(f"Elapsed time TENAX : {elapsed_time:.4f} seconds")
+
+
 
 start_time = time.time()
 
