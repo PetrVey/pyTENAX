@@ -806,7 +806,7 @@ def gen_norm_loglik(x, par, beta):
     pdf = gen_norm_pdf(x, mu, sigma, beta)
     n = len(pdf[pdf==0])
     if n>5:
-        print("warning: "+n+" zero values")
+        print(f"warning: {n} zero values")
         
     pdf[pdf==0] = 1e-10 #stops issue if zero generated
     loglik = np.sum(np.log(pdf))
