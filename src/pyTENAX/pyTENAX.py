@@ -444,6 +444,28 @@ class TENAX():
     
     
     def associate_vars(self, dict_ordinary, data_temperature , dates_temperature ):
+        """
+        
+
+        Parameters
+        ----------
+        dict_ordinary : TYPE
+            DESCRIPTION.
+        data_temperature : TYPE
+            DESCRIPTION.
+        dates_temperature : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        dict_ordinary : TYPE
+            DESCRIPTION.
+        dict_dropped_oe : TYPE
+            DESCRIPTION.
+        n_ordinary_per_year_new : TYPE
+            DESCRIPTION.
+
+        """
         #start here 
         dict_dropped_oe = {}
         time_index =dates_temperature.reshape(-1)
@@ -503,6 +525,30 @@ class TENAX():
         return dict_ordinary, dict_dropped_oe, n_ordinary_per_year_new
     
     def magnitude_model(self, data_oe_prec, data_oe_temp, thr):
+        """
+        
+
+        Parameters
+        ----------
+        data_oe_prec : numpy.ndarray
+            Array of precipitation ordinary events data.
+        data_oe_temp : numpy.ndarray
+            Array of temperature ordinary events data.
+        thr : numpy.float64
+            Magnitude of precipitation threshold.
+
+        Returns
+        -------
+        phat : numpy.ndarray
+            Parameters of the magnitude model. [kappa_0,b,lambda_0,a].
+        loglik : numpy.float64
+            Log likelihood.
+        loglik_H1 : numpy.float64
+            Log likelihood of alternative hypothesis.
+        loglik_H0shape : numpy.float64
+            Log likelihood of null hypothesis.
+
+        """
         # alpha=0 --> dependence of shape on T is always allowed 
         # alpha=1 --> dependence of shape on T is never allowed 
         # else    --> dependence of shape on T depends on stat. significance
