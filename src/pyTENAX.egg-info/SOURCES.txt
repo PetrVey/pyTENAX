@@ -14,6 +14,7 @@ res/temp_data.csv
 res/temp_data_Aadorf.parquet
 src/test_tenax.py
 src/pyTENAX/pyTENAX.py
+src/pyTENAX/smev_class.py
 src/pyTENAX.egg-info/PKG-INFO
 src/pyTENAX.egg-info/SOURCES.txt
 src/pyTENAX.egg-info/dependency_links.txt
