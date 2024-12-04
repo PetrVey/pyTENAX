@@ -258,7 +258,7 @@ RL1, _, _ = S.model_inversion(F_phat1, g_phat1, n1, Ts)
 F_phat2, loglik2, _, _ = S.magnitude_model(P2, T2, thr)
 RL2, _, _ = S.model_inversion(F_phat2, g_phat2, n2, Ts)   
 
-if F_phat[2]==0:
+if F_phat[1]==0: #check if b parameter is 0 (shape=shape_0*b
     dof=3
     alpha1=1; # b parameter is not significantly different from 0; 3 degrees of freedom for the LR test
 else: 
