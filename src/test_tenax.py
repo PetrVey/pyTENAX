@@ -228,9 +228,10 @@ plt.show()
 
 
 #TENAX MODEL VALIDATION
+ S.n_monte_carlo = 20000 # set number of MC for getting RL
 yrs = dict_ordinary["10"]["oe_time"].dt.year
 yrs_unique = np.unique(yrs)
-midway = yrs_unique[int(np.ceil(np.size(yrs_unique)/2))]
+midway = yrs_unique[int(np.ceil(np.size(yrs_unique)/2))-1] # -1 to adjust indexing because this returns a sort of length
 
 #DEFINE FIRST PERIOD
 P1 = P[yrs<=midway]
