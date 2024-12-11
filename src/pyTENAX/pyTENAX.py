@@ -15,6 +15,7 @@ import time
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from packaging.version import parse
+from scipy.optimize import curve_fit
 
 class TENAX():
     """
@@ -560,7 +561,19 @@ class TENAX():
             g_phat = minimize(lambda par: -gen_norm_loglik(data_oe_temp, par, beta), init_g, method='Nelder-Mead').x
             
         elif method == "skewnorm":
-            g_phat = skewnorm.fit(data_oe_temp) #returns loc, scale, shape
+            # Fit the skew-normal distribution
+            # Initial guess for the parameters
+            # Compute histogram data
+            def skewnorm_pdf(x, alpha, loc, scale):
+                return skewnorm.pdf(x, alpha, loc=loc, scale=scale)
+            
+            hist, bin_edges = np.histogram(data_oe_temp, bins=100, density=True)
+            # Bin centers for xdata
+            xdata = (bin_edges[:-1] + bin_edges[1:]) / 2
+            initial_guess = [-3, np.mean(data_oe_temp), np.std(data_oe_temp)]  # Guess for alpha, loc, scale
+            g_phat , _ = curve_fit(skewnorm_pdf, xdata, hist, p0=initial_guess, maxfev=10000)
+            g_phat = tuple(g_phat.reshape(1, -1)[0])
+            #g_phat = skewnorm.fit(data_oe_temp) #returns loc, scale, shape
             
         else:
           print("not given method - temperature model")

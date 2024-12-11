@@ -132,8 +132,8 @@ S.n_monte_carlo = 20000
 
 # tENAX uncertainty
 start_time = time.time()
-#F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(P, T, blocks_id, Ts,
-#                                                                                 temp_method="skewnorm")
+F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(P, T, blocks_id, Ts,
+                                                                                 temp_method="skewnorm")
 
 elapsed_time = time.time() - start_time
 print(f"Time to do TENAX uncertainty: {elapsed_time:.4f} seconds")
