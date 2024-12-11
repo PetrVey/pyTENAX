@@ -31,7 +31,6 @@ from pyTENAX.smev_class import *
 
 S = TENAX(
         return_period = [2,5,10,20,50,100, 200],  #for some reason it doesnt like calculating RP =<1
-
         durations = [10, 60, 180, 360, 720, 1440],
         left_censoring = [0, 0.90],
         alpha = 0.05,
@@ -228,7 +227,7 @@ plt.show()
 
 
 #TENAX MODEL VALIDATION
- S.n_monte_carlo = 20000 # set number of MC for getting RL
+S.n_monte_carlo = 20000 # set number of MC for getting RL
 yrs = dict_ordinary["10"]["oe_time"].dt.year
 yrs_unique = np.unique(yrs)
 midway = yrs_unique[int(np.ceil(np.size(yrs_unique)/2))-1] # -1 to adjust indexing because this returns a sort of length

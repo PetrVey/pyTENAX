@@ -9,7 +9,7 @@ from scipy.stats import weibull_min
 from scipy.optimize import minimize
 from scipy.stats import chi2
 from scipy.special import gamma
-from scipy.stats import norm
+from scipy.stats import norm, skewnorm
 from scipy.optimize import root_scalar
 import time
 import statsmodels.api as sm
@@ -547,25 +547,42 @@ class TENAX():
             
         return phat, loglik, loglik_H1, loglik_H0shape
    
-    def temperature_model(self, data_oe_temp, beta = 0):
+    def temperature_model(self, data_oe_temp, beta = 0, method="norm"):
         if beta == 0:
             beta = self.beta
         else:
             beta = beta
         
-        mu, sigma = norm.fit(data_oe_temp)
-        init_g = [mu, sigma]
-        
-        g_phat = minimize(lambda par: -gen_norm_loglik(data_oe_temp, par, beta), init_g, method='Nelder-Mead').x
-        
+        if method == "norm":
+            mu, sigma = norm.fit(data_oe_temp)
+            init_g = [mu, sigma]
+            
+            g_phat = minimize(lambda par: -gen_norm_loglik(data_oe_temp, par, beta), init_g, method='Nelder-Mead').x
+            
+        elif method == "skewnorm":
+            g_phat = skewnorm.fit(data_oe_temp) #returns loc, scale, shape
+            
+        else:
+          print("not given method - temperature model")
+          g_phat = []    
+            
         return g_phat
     
-    def model_inversion(self, F_phat, g_phat, n, Ts, gen_P_mc = False,gen_RL=True):
+    def model_inversion(self, F_phat, g_phat, n, Ts, gen_P_mc = False,gen_RL=True,
+                        temp_method = "norm", method_root_scalar="brentq"):
         P_mc = []
         ret_lev = []
-        pdf_values = gen_norm_pdf(Ts, g_phat[0], g_phat[1], self.beta)
-        df = np.vstack([pdf_values, Ts])
-
+        
+        if temp_method == "skewnorm":
+            pdf_values  =  skewnorm.pdf(Ts, *g_phat)
+            df = np.vstack([pdf_values, Ts])
+        elif temp_method == "norm":
+            pdf_values = gen_norm_pdf(Ts, g_phat[0], g_phat[1], self.beta)
+            df = np.vstack([pdf_values, Ts])
+        else:
+            print("not given correct method - temperature model")
+            
+            
         # Generates random T values according to the temperature model
         T_mc = randdf(self.n_monte_carlo, df, 'pdf').T              
        
@@ -576,10 +593,24 @@ class TENAX():
                                     ))
 
        
+        # old vguess
         vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05)
         
+# =============================================================================
+#         #testing new vguess
+#         # Ensure Weibull parameters are valid
+#         wbl_phat[:, 0] = np.maximum(wbl_phat[:, 0], 1e-6)  # Scale > 0
+#         wbl_phat[:, 1] = np.maximum(wbl_phat[:, 1], 1e-6)  # Shape > 0
+#         
+#         # Dynamic vguess range
+#         v_min = np.min(wbl_phat[:, 0]) * 0.1
+#         v_max = np.max(wbl_phat[:, 0]) * 10
+#         vguess = np.logspace(np.log10(v_min), np.log10(v_max), 500)
+#         #testing new end
+# =============================================================================
+        
         if gen_RL:
-            ret_lev = SMEV_Mc_inversion(wbl_phat, n, self.return_period, vguess)
+            ret_lev = SMEV_Mc_inversion(wbl_phat, n, self.return_period, vguess, method_root_scalar=method_root_scalar)
         else:
             pass
                 
@@ -596,7 +627,9 @@ class TENAX():
         return ret_lev, T_mc, P_mc
         
     #uncerteinty TENAX MODEL HERE
-    def TNX_tenax_bootstrap_uncertainty(self, P, T, blocks_id, Ts):
+    def TNX_tenax_bootstrap_uncertainty(self, P, T, blocks_id, Ts,
+                                        temp_method="norm",
+                                        method_root_scalar="brentq"):
         """
         Bootstrap uncertainty estimation for the TENAX model.
 
@@ -630,7 +663,12 @@ class TENAX():
 
         # Initialize variables
         F_phat_unc = np.full((niter, 4), np.nan)
-        g_phat_unc = np.full((niter, 2), np.nan)
+        if temp_method == "norm":
+           g_phat_unc = np.full((niter, 2), np.nan)
+        elif temp_method == "skewnorm":
+           g_phat_unc = np.full((niter, 3), np.nan)
+        else :
+           g_phat_unc = []
         RL_unc = np.full((niter, len(RP)), np.nan)
         n_unc = np.full(niter, np.nan)
         n_err = 0
@@ -662,13 +700,15 @@ class TENAX():
                 # Magnitude model
                 F_phat_temporary, loglik_temp, _, _ = self.magnitude_model(Pr, Tr, thr)
                 # Temperature model
-                g_phat_temporary = self.temperature_model(Tr)
+                g_phat_temporary = self.temperature_model(Tr, method = temp_method)
                 # Mean number of events per block
                 n_temporary = len(Pr) / M
                 # Estimate return levels using Monte Carlo samples
                 #TODO: check this cause it is slow...
                 RL_temporary, _, _ = self.model_inversion(F_phat_temporary, g_phat_temporary, 
-                                                          n_temporary, Ts, )
+                                                          n_temporary, Ts,
+                                                          temp_method=temp_method,
+                                                          method_root_scalar=method_root_scalar)
 
                 # Store results
                 F_phat_unc[ii, :] = F_phat_temporary
@@ -895,7 +935,7 @@ def MC_tSMEV_cdf(y, wbl_phat, n):
     p = (p / wbl_phat.shape[0]) ** n
     return p
 
-def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess):
+def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess, method_root_scalar):
     """
     Invert to find quantiles corresponding to the target return periods.
     
@@ -932,14 +972,19 @@ def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess):
             return MC_tSMEV_cdf(y, wbl_phat, n) - pr[t]
 
         # Use root_scalar as an alternative to MATLAB's fzero
-        result = root_scalar(func, bracket=[vguess[0], vguess[-1]], x0=first_guess, method='brentq')
+        result = root_scalar(func, bracket=[vguess[0], vguess[-1]], x0=first_guess, method=method_root_scalar)
 
         if result.converged:
             qnt[t] = result.root
 
     return qnt
 
-def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',obslabel = 'observations',vallabel = 'temperature model g(T)',xlimits = [-15,30],ylimits = [0,0.06]):
+def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',
+                       obslabel = 'observations',
+                       vallabel = 'temperature model g(T)',
+                       xlimits = [-15,30],
+                       ylimits = [0,0.06],
+                       method = "norm"):
     """
     Plots the observational and model temperature pdf    
 
@@ -978,8 +1023,14 @@ def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',obslabel = 'ob
     hist, bin_edges = np.histogram(T, bins=eT_edges, density=True)
     plt.plot(eT, hist, '--', color=obscol, label=obslabel)
     
+    
     # Plot analytical PDF of T (validation)
-    plt.plot(eT, gen_norm_pdf(eT, g_phat[0], g_phat[1], beta), '-', color=valcol, label=vallabel)
+    if method == "skewnorm":
+        pdf_values  =  skewnorm.pdf(eT, *g_phat)
+    elif method == "norm":
+        pdf_values = gen_norm_pdf(eT, g_phat[0], g_phat[1], beta)
+        
+    plt.plot(eT, pdf_values, '-', color=valcol, label=vallabel)
     
     # Set plot parameters
     #ax.set_xlim(Tlims)
