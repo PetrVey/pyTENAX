@@ -32,13 +32,14 @@ from pyTENAX.smev_class import *
 S = TENAX(
         return_period = [2,5,10,20,50,100, 200],  #for some reason it doesnt like calculating RP =<
         durations = [60, 180, 360, 720, 1440],
-        left_censoring = [0, 0.8],
+        left_censoring = [0, 0.9],
         alpha = 0.05,
     )
 
-file_path_input =f"{RES_DIR}/florida_station_P.csv"
+
+file_path_input =f"{RES_DIR}/Florida_P.parquet"
 #Load data from csv file
-data=pd.read_csv(file_path_input)
+data=pd.read_parquet(file_path_input)
 # Convert 'prec_time' column to datetime, if it's not already
 data['prec_time'] = pd.to_datetime(data['prec_time'])
 # Set 'prec_time' as the index
@@ -75,8 +76,8 @@ elapsed_time = time.time() - start_time
 print(f"Elapsed time get OE: {elapsed_time:.4f} seconds")
 
 #load temperature data
-file_path_temperature = f"{RES_DIR}/florida_station_T.csv"
-t_data=pd.read_csv(file_path_temperature)
+file_path_temperature = f"{RES_DIR}/Florida_T.parquet"
+t_data=pd.read_parquet(file_path_temperature)
 # Convert 'temp_time' column to datetime if it's not already in datetime format
 t_data['valid_time'] = pd.to_datetime(t_data['valid_time'])
 # Set 'temp_time' as the index
@@ -131,8 +132,8 @@ S.n_monte_carlo = 20000
 
 # tENAX uncertainty
 start_time = time.time()
-F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(P, T, blocks_id, Ts,
-                                                                                 temp_method="skewnorm")
+#F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(P, T, blocks_id, Ts,
+#                                                                                 temp_method="skewnorm")
 
 elapsed_time = time.time() - start_time
 print(f"Time to do TENAX uncertainty: {elapsed_time:.4f} seconds")
@@ -167,14 +168,14 @@ eT = np.arange(np.min(T),np.max(T)+4,1) # define T values to calculate distribut
 
 # fig 2a
 qs = [.85,.95,.99,.999]
-TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs, xlimits=[15,30])
+TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs, xlimits=[0,40])
 plt.ylabel('10-minute precipitation (mm)')
 plt.title('fig 2a')
 plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15))
 plt.show()
 
 #fig 2b
-TNX_FIG_temp_model(T, g_phat,S.beta, eT, method="skewnorm", xlimits=[15,30], ylimits=[0,.6])
+TNX_FIG_temp_model(T, g_phat,S.beta, eT, method="skewnorm", xlimits=[0,40], ylimits=[0,.4])
 plt.title('fig 2b')
 plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15))
 plt.show()

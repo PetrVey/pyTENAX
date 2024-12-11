@@ -594,20 +594,9 @@ class TENAX():
 
        
         # old vguess
-        vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05)
-        
-# =============================================================================
-#         #testing new vguess
-#         # Ensure Weibull parameters are valid
-#         wbl_phat[:, 0] = np.maximum(wbl_phat[:, 0], 1e-6)  # Scale > 0
-#         wbl_phat[:, 1] = np.maximum(wbl_phat[:, 1], 1e-6)  # Shape > 0
-#         
-#         # Dynamic vguess range
-#         v_min = np.min(wbl_phat[:, 0]) * 0.1
-#         v_max = np.max(wbl_phat[:, 0]) * 10
-#         vguess = np.logspace(np.log10(v_min), np.log10(v_max), 500)
-#         #testing new end
-# =============================================================================
+        #vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05
+        # test new vguess
+        vguess = 10 ** np.arange(np.log10(0.1), np.log10(5e2), 0.05)
         
         if gen_RL:
             ret_lev = SMEV_Mc_inversion(wbl_phat, n, self.return_period, vguess, method_root_scalar=method_root_scalar)
