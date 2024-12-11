@@ -190,13 +190,13 @@ plt.show()
 
 
 #fig 5 
-iTs = np.arange(-2.5,37.5,1.5) #idk why we need a different T range here 
+iTs = np.arange(-2.5,40,1.5) #idk why we need a different T range here 
 S.n_monte_carlo = np.size(P)*S.niter_smev
 _, T_mc, P_mc = S.model_inversion(F_phat, g_phat, n, Ts,gen_P_mc = True,gen_RL=False) 
 elapsed_time = time.time() - start_time
 # Print the elapsed time
 print(f"Elapsed time model_inversion all: {elapsed_time:.4f} seconds")
-scaling_rate_W, scaling_rate_q = TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,S.niter_smev,eT,iTs)
+scaling_rate_W, scaling_rate_q = TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,S.niter_smev,eT,iTs, xlimits=[0,40])
 plt.title('fig 5')
 plt.ylabel('10-minute precipitation (mm)')
 plt.show()
@@ -233,7 +233,7 @@ plt.show()
 
 #TENAX MODEL VALIDATION
 S.n_monte_carlo = 20000 # set number of MC for getting RL
-yrs = dict_ordinary["10"]["oe_time"].dt.year
+yrs = dict_ordinary["60"]["oe_time"].dt.year
 yrs_unique = np.unique(yrs)
 midway = yrs_unique[int(np.ceil(np.size(yrs_unique)/2))-1] # -1 to adjust indexing because this returns a sort of length
 
@@ -252,16 +252,16 @@ n_ordinary_per_year2 = n_ordinary_per_year[n_ordinary_per_year.index>midway]
 n2 = n_ordinary_per_year2.sum() / len(n_ordinary_per_year2)
 
 
-g_phat1 = S.temperature_model(T1)
-g_phat2 = S.temperature_model(T2)
+g_phat1 = S.temperature_model(T1, method="skewnorm")
+g_phat2 = S.temperature_model(T2, method="skewnorm")
 
 
 F_phat1, loglik1, _, _ = S.magnitude_model(P1, T1, thr)
-RL1, _, _ = S.model_inversion(F_phat1, g_phat1, n1, Ts)
+RL1, _, _ = S.model_inversion(F_phat1, g_phat1, n1, Ts, temp_method="skewnorm")
    
 
 F_phat2, loglik2, _, _ = S.magnitude_model(P2, T2, thr)
-RL2, _, _ = S.model_inversion(F_phat2, g_phat2, n2, Ts)   
+RL2, _, _ = S.model_inversion(F_phat2, g_phat2, n2, Ts, temp_method="skewnorm")  
 
 if F_phat[1]==0: #check if b parameter is 0 (shape=shape_0*b
     dof=3
@@ -283,22 +283,26 @@ else:
 
 #modelling second model based on first magnitude and changes in mean/std
 mu_delta = np.mean(T2)-np.mean(T1)
-sigma_factor = np.std(T2)/np.std(T1)
+sigma_factor = g_phat2[2]/g_phat1[2]
 
-g_phat2_predict = [g_phat1[0]+mu_delta, g_phat1[1]*sigma_factor]
-RL2_predict, _,_ = S.model_inversion(F_phat1,g_phat2_predict,n2,Ts)
+g_phat2_predict = [g_phat1[0],g_phat1[1]+mu_delta, g_phat1[2]*sigma_factor]
+RL2_predict, _,_ = S.model_inversion(F_phat1,g_phat2_predict,n2,Ts, temp_method="skewnorm")
 
 
 #fig 7a
 
-TNX_FIG_temp_model(T=T1, g_phat=g_phat1,beta=4,eT=eT,obscol='b',valcol='b',obslabel = None,vallabel = 'Temperature model '+str(yrs_unique[0])+'-'+str(midway))
-TNX_FIG_temp_model(T=T2, g_phat=g_phat2_predict,beta=4,eT=eT,obscol='r',valcol='r',obslabel = None,vallabel = 'Temperature model '+str(midway+1)+'-'+str(yrs_unique[-1])) # model based on temp ave and std changes
+TNX_FIG_temp_model(T=T1, g_phat=g_phat1,beta=4,eT=eT,obscol='b',valcol='b',obslabel = None,vallabel = 'Temperature model '+str(yrs_unique[0])+'-'+str(midway),
+                   method="skewnorm", xlimits=[0,40], ylimits=[0,.3])
+TNX_FIG_temp_model(T=T2, g_phat=g_phat2_predict,beta=4,eT=eT,obscol='r',valcol='r',obslabel = None,vallabel = 'Temperature model '+str(midway+1)+'-'+str(yrs_unique[-1]),
+                   method="skewnorm", xlimits=[0,40], ylimits=[0,.3]) # model based on temp ave and std changes
 plt.show() #this is slightly different in code and paper I think.. using predicted T vs fitted T
 
 #fig 7b
 
-TNX_FIG_valid(AMS1,S.return_period,RL1,TENAXcol='b',obscol_shape = 'b+',TENAXlabel = 'The TENAX model '+str(yrs_unique[0])+'-'+str(midway),obslabel='Observed annual maxima '+str(yrs_unique[0])+'-'+str(midway))
-TNX_FIG_valid(AMS2,S.return_period,RL2_predict,TENAXcol='r',obscol_shape = 'r+',TENAXlabel = 'The predicted TENAX model '+str(midway+1)+'-'+str(yrs_unique[-1]),obslabel='Observed annual maxima '+str(midway+1)+'-'+str(yrs_unique[-1]))
+TNX_FIG_valid(AMS1,S.return_period,RL1,TENAXcol='b',obscol_shape = 'b+',TENAXlabel = 'The TENAX model '+str(yrs_unique[0])+'-'+str(midway),
+              obslabel='Observed annual maxima '+str(yrs_unique[0])+'-'+str(midway), ylimits=[0,200] )
+TNX_FIG_valid(AMS2,S.return_period,RL2_predict,TENAXcol='r',obscol_shape = 'r+',TENAXlabel = 'The predicted TENAX model '+str(midway+1)+'-'+str(yrs_unique[-1]),
+              obslabel='Observed annual maxima '+str(midway+1)+'-'+str(yrs_unique[-1]), ylimits=[0,200] )
 
 plt.show()
 
