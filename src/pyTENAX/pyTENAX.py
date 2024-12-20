@@ -609,7 +609,7 @@ class TENAX():
         # old vguess
         #vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05
         # test new vguess
-        vguess = 10 ** np.arange(np.log10(0.1), np.log10(5e2), 0.05)
+        vguess = 10 ** np.arange(np.log10(0.05), np.log10(5e2), 0.05)
         
         if gen_RL:
             ret_lev = SMEV_Mc_inversion(wbl_phat, n, self.return_period, vguess, method_root_scalar=method_root_scalar)
