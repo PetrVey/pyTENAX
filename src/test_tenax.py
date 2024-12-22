@@ -1,9 +1,11 @@
 """
 Created on Thu Oct 17 14:53:36 2024
+@author: Petr, Ella
 
-@author: Petr
-@Riccardo Ciceri, riccardo.ciceri@studenti.unipd.it
-# Developed starting from https://zenodo.org/records/11935026
+# Developed starting from https://zenodo.org/records/11935026 
+# @Riccardo Ciceri, riccardo.ciceri@studenti.unipd.it
+
+Last update 20.12.2024
 """
 import os
 # os.environ['USE_PYGEOS'] = '0'
@@ -31,7 +33,6 @@ from pyTENAX.smev_class import *
 
 S = TENAX(
         return_period = [2,5,10,20,50,100, 200],  #for some reason it doesnt like calculating RP =<1
-
         durations = [10, 60, 180, 360, 720, 1440],
         left_censoring = [0, 0.90],
         alpha = 0.05,
@@ -170,11 +171,13 @@ qs = [.85,.95,.99,.999]
 TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs)
 plt.ylabel('10-minute precipitation (mm)')
 plt.title('fig 2a')
+plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 plt.show()
 
 #fig 2b
 TNX_FIG_temp_model(T, g_phat,S.beta,eT)
 plt.title('fig 2b')
+plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 plt.show()
 
 #fig 4 
@@ -182,6 +185,7 @@ AMS = dict_AMS['10'] # yet the annual maxima
 TNX_FIG_valid(AMS,S.return_period,RL,smev_RL,RL_unc,smev_RL_unc)
 plt.title('fig 4')
 plt.ylabel('10-minute precipitation (mm)')
+plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 plt.show()
 
 
@@ -195,6 +199,7 @@ print(f"Elapsed time model_inversion all: {elapsed_time:.4f} seconds")
 scaling_rate_W, scaling_rate_q = TNX_FIG_scaling(P,T,P_mc,T_mc,F_phat,S.niter_smev,eT,iTs)
 plt.title('fig 5')
 plt.ylabel('10-minute precipitation (mm)')
+plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1))
 plt.show()
 
 #SPLITTING INTO SUMMER/WINTER
@@ -223,12 +228,12 @@ TNX_FIG_temp_model(T=T_summer, g_phat=g_phat_summer,beta=2,eT=eT,obscol='r',valc
 TNX_FIG_temp_model(T=T_winter, g_phat=g_phat_winter,beta=2,eT=eT,obscol='b',valcol='b',obslabel = None,vallabel = 'Winter',xlimits = [-15,30],ylimits = [0,0.1])
 TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT,obscol='k',valcol='k',obslabel = None,vallabel = 'Annual',xlimits = [-15,30],ylimits = [0,0.1])
 plt.plot(eT,combined_pdf,'m',label = 'Combined summer and winter')
-plt.legend()
+plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 plt.show()
 
 
 #TENAX MODEL VALIDATION
- S.n_monte_carlo = 20000 # set number of MC for getting RL
+S.n_monte_carlo = 20000 # set number of MC for getting RL
 yrs = dict_ordinary["10"]["oe_time"].dt.year
 yrs_unique = np.unique(yrs)
 midway = yrs_unique[int(np.ceil(np.size(yrs_unique)/2))-1] # -1 to adjust indexing because this returns a sort of length
@@ -289,13 +294,14 @@ RL2_predict, _,_ = S.model_inversion(F_phat1,g_phat2_predict,n2,Ts)
 
 TNX_FIG_temp_model(T=T1, g_phat=g_phat1,beta=4,eT=eT,obscol='b',valcol='b',obslabel = None,vallabel = 'Temperature model '+str(yrs_unique[0])+'-'+str(midway))
 TNX_FIG_temp_model(T=T2, g_phat=g_phat2_predict,beta=4,eT=eT,obscol='r',valcol='r',obslabel = None,vallabel = 'Temperature model '+str(midway+1)+'-'+str(yrs_unique[-1])) # model based on temp ave and std changes
+plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 plt.show() #this is slightly different in code and paper I think.. using predicted T vs fitted T
 
 #fig 7b
 
 TNX_FIG_valid(AMS1,S.return_period,RL1,TENAXcol='b',obscol_shape = 'b+',TENAXlabel = 'The TENAX model '+str(yrs_unique[0])+'-'+str(midway),obslabel='Observed annual maxima '+str(yrs_unique[0])+'-'+str(midway))
 TNX_FIG_valid(AMS2,S.return_period,RL2_predict,TENAXcol='r',obscol_shape = 'r+',TENAXlabel = 'The predicted TENAX model '+str(midway+1)+'-'+str(yrs_unique[-1]),obslabel='Observed annual maxima '+str(midway+1)+'-'+str(yrs_unique[-1]))
-
+plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 plt.show()
 
 
@@ -386,7 +392,6 @@ ax3.set_title('Sensitivity to changes in mean events per year (n)')
 plt.xscale('log')
 plt.xlim(1,200)
 plt.ylim(0,60)
-
 
 
 plt.show()
