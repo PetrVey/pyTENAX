@@ -9,12 +9,13 @@ from scipy.stats import weibull_min
 from scipy.optimize import minimize
 from scipy.stats import chi2
 from scipy.special import gamma
-from scipy.stats import norm
+from scipy.stats import norm, skewnorm
 from scipy.optimize import root_scalar
 import time
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from packaging.version import parse
+from scipy.optimize import curve_fit
 
 class TENAX():
     """
@@ -593,6 +594,7 @@ class TENAX():
             
         return phat, loglik, loglik_H1, loglik_H0shape
    
+<<<<<<< HEAD
     def temperature_model(self, data_oe_temp, beta = 0):
         """
         Fits the temperature data to the TENAX temperature model ()
@@ -610,24 +612,56 @@ class TENAX():
             DESCRIPTION.
 
         """
+=======
+    def temperature_model(self, data_oe_temp, beta = 0, method="norm"):
+>>>>>>> origin
         if beta == 0:
             beta = self.beta
         else:
             beta = beta
         
-        mu, sigma = norm.fit(data_oe_temp)
-        init_g = [mu, sigma]
-        
-        g_phat = minimize(lambda par: -gen_norm_loglik(data_oe_temp, par, beta), init_g, method='Nelder-Mead').x
-        
+        if method == "norm":
+            mu, sigma = norm.fit(data_oe_temp)
+            init_g = [mu, sigma]
+            
+            g_phat = minimize(lambda par: -gen_norm_loglik(data_oe_temp, par, beta), init_g, method='Nelder-Mead').x
+            
+        elif method == "skewnorm":
+            # Fit the skew-normal distribution
+            # Initial guess for the parameters
+            # Compute histogram data
+            def skewnorm_pdf(x, alpha, loc, scale):
+                return skewnorm.pdf(x, alpha, loc=loc, scale=scale)
+            
+            hist, bin_edges = np.histogram(data_oe_temp, bins=100, density=True)
+            # Bin centers for xdata
+            xdata = (bin_edges[:-1] + bin_edges[1:]) / 2
+            initial_guess = [-3, np.mean(data_oe_temp), np.std(data_oe_temp)]  # Guess for alpha, loc, scale
+            g_phat , _ = curve_fit(skewnorm_pdf, xdata, hist, p0=initial_guess, maxfev=10000)
+            g_phat = tuple(g_phat.reshape(1, -1)[0])
+            #g_phat = skewnorm.fit(data_oe_temp) #returns loc, scale, shape
+            
+        else:
+          print("not given method - temperature model")
+          g_phat = []    
+            
         return g_phat
     
-    def model_inversion(self, F_phat, g_phat, n, Ts, gen_P_mc = False,gen_RL=True):
+    def model_inversion(self, F_phat, g_phat, n, Ts, gen_P_mc = False,gen_RL=True,
+                        temp_method = "norm", method_root_scalar="brentq"):
         P_mc = []
         ret_lev = []
-        pdf_values = gen_norm_pdf(Ts, g_phat[0], g_phat[1], self.beta)
-        df = np.vstack([pdf_values, Ts])
-
+        
+        if temp_method == "skewnorm":
+            pdf_values  =  skewnorm.pdf(Ts, *g_phat)
+            df = np.vstack([pdf_values, Ts])
+        elif temp_method == "norm":
+            pdf_values = gen_norm_pdf(Ts, g_phat[0], g_phat[1], self.beta)
+            df = np.vstack([pdf_values, Ts])
+        else:
+            print("not given correct method - temperature model")
+            
+            
         # Generates random T values according to the temperature model
         T_mc = randdf(self.n_monte_carlo, df, 'pdf').T              
        
@@ -638,10 +672,13 @@ class TENAX():
                                     ))
 
        
-        vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05)
+        # old vguess
+        #vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05
+        # test new vguess
+        vguess = 10 ** np.arange(np.log10(0.05), np.log10(5e2), 0.05)
         
         if gen_RL:
-            ret_lev = SMEV_Mc_inversion(wbl_phat, n, self.return_period, vguess)
+            ret_lev = SMEV_Mc_inversion(wbl_phat, n, self.return_period, vguess, method_root_scalar=method_root_scalar)
         else:
             pass
                 
@@ -658,7 +695,9 @@ class TENAX():
         return ret_lev, T_mc, P_mc
         
     #uncerteinty TENAX MODEL HERE
-    def TNX_tenax_bootstrap_uncertainty(self, P, T, blocks_id, Ts):
+    def TNX_tenax_bootstrap_uncertainty(self, P, T, blocks_id, Ts,
+                                        temp_method="norm",
+                                        method_root_scalar="brentq"):
         """
         Bootstrap uncertainty estimation for the TENAX model.
 
@@ -692,7 +731,12 @@ class TENAX():
 
         # Initialize variables
         F_phat_unc = np.full((niter, 4), np.nan)
-        g_phat_unc = np.full((niter, 2), np.nan)
+        if temp_method == "norm":
+           g_phat_unc = np.full((niter, 2), np.nan)
+        elif temp_method == "skewnorm":
+           g_phat_unc = np.full((niter, 3), np.nan)
+        else :
+           g_phat_unc = []
         RL_unc = np.full((niter, len(RP)), np.nan)
         n_unc = np.full(niter, np.nan)
         n_err = 0
@@ -724,13 +768,15 @@ class TENAX():
                 # Magnitude model
                 F_phat_temporary, loglik_temp, _, _ = self.magnitude_model(Pr, Tr, thr)
                 # Temperature model
-                g_phat_temporary = self.temperature_model(Tr)
+                g_phat_temporary = self.temperature_model(Tr, method = temp_method)
                 # Mean number of events per block
                 n_temporary = len(Pr) / M
                 # Estimate return levels using Monte Carlo samples
                 #TODO: check this cause it is slow...
                 RL_temporary, _, _ = self.model_inversion(F_phat_temporary, g_phat_temporary, 
-                                                          n_temporary, Ts, )
+                                                          n_temporary, Ts,
+                                                          temp_method=temp_method,
+                                                          method_root_scalar=method_root_scalar)
 
                 # Store results
                 F_phat_unc[ii, :] = F_phat_temporary
@@ -957,7 +1003,7 @@ def MC_tSMEV_cdf(y, wbl_phat, n):
     p = (p / wbl_phat.shape[0]) ** n
     return p
 
-def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess):
+def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess, method_root_scalar):
     """
     Invert to find quantiles corresponding to the target return periods.
     
@@ -994,14 +1040,19 @@ def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess):
             return MC_tSMEV_cdf(y, wbl_phat, n) - pr[t]
 
         # Use root_scalar as an alternative to MATLAB's fzero
-        result = root_scalar(func, bracket=[vguess[0], vguess[-1]], x0=first_guess, method='brentq')
+        result = root_scalar(func, bracket=[vguess[0], vguess[-1]], x0=first_guess, method=method_root_scalar)
 
         if result.converged:
             qnt[t] = result.root
 
     return qnt
 
-def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',obslabel = 'observations',vallabel = 'temperature model g(T)',xlimits = [-15,30],ylimits = [0,0.06]):
+def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',
+                       obslabel = 'observations',
+                       vallabel = 'temperature model g(T)',
+                       xlimits = [-15,30],
+                       ylimits = [0,0.06],
+                       method = "norm"):
     """
     Plots the observational and model temperature pdf    
 
@@ -1040,8 +1091,14 @@ def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',obslabel = 'ob
     hist, bin_edges = np.histogram(T, bins=eT_edges, density=True)
     plt.plot(eT, hist, '--', color=obscol, label=obslabel)
     
+    
     # Plot analytical PDF of T (validation)
-    plt.plot(eT, gen_norm_pdf(eT, g_phat[0], g_phat[1], beta), '-', color=valcol, label=vallabel)
+    if method == "skewnorm":
+        pdf_values  =  skewnorm.pdf(eT, *g_phat)
+    elif method == "norm":
+        pdf_values = gen_norm_pdf(eT, g_phat[0], g_phat[1], beta)
+        
+    plt.plot(eT, pdf_values, '-', color=valcol, label=vallabel)
     
     # Set plot parameters
     #ax.set_xlim(Tlims)
