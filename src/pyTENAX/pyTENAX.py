@@ -594,27 +594,9 @@ class TENAX():
             
         return phat, loglik, loglik_H1, loglik_H0shape
    
-<<<<<<< HEAD
-    def temperature_model(self, data_oe_temp, beta = 0):
-        """
-        Fits the temperature data to the TENAX temperature model ()
 
-        Parameters
-        ----------
-        data_oe_temp : TYPE
-            DESCRIPTION.
-        beta : TYPE, optional
-            DESCRIPTION. The default is 0.
-
-        Returns
-        -------
-        g_phat : TYPE
-            DESCRIPTION.
-
-        """
-=======
     def temperature_model(self, data_oe_temp, beta = 0, method="norm"):
->>>>>>> origin
+
         if beta == 0:
             beta = self.beta
         else:
