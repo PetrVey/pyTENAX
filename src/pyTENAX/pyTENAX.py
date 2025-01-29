@@ -445,7 +445,7 @@ class TENAX():
     
     def associate_vars(self, dict_ordinary, data_temperature , dates_temperature ):
         """
-        
+        Get additional variables for the ordinary events #TODO: have no clue about this one
 
         Parameters
         ----------
@@ -526,7 +526,7 @@ class TENAX():
     
     def magnitude_model(self, data_oe_prec, data_oe_temp, thr):
         """
-        
+        Fits the data to the magnitude model of TENAX. 
 
         Parameters
         ----------
@@ -594,6 +594,22 @@ class TENAX():
         return phat, loglik, loglik_H1, loglik_H0shape
    
     def temperature_model(self, data_oe_temp, beta = 0):
+        """
+        Fits the temperature data to the TENAX temperature model ()
+
+        Parameters
+        ----------
+        data_oe_temp : TYPE
+            DESCRIPTION.
+        beta : TYPE, optional
+            DESCRIPTION. The default is 0.
+
+        Returns
+        -------
+        g_phat : TYPE
+            DESCRIPTION.
+
+        """
         if beta == 0:
             beta = self.beta
         else:
@@ -733,8 +749,8 @@ def wbl_leftcensor_loglik(theta, x, t, thr):
 
     Parameters
     ----------
-    theta : TYPE
-        DESCRIPTION.
+    theta : float
+        initial guess for fit.
     x : TYPE
         DESCRIPTION.
     t : TYPE
@@ -783,13 +799,13 @@ def wbl_leftcensor_loglik_H0shape(theta, x, t, thr):
     Parameters
     ----------
     theta : TYPE
-        DESCRIPTION.
+        Initial guess.
     x : TYPE
-        DESCRIPTION.
+        Precipitation data.
     t : TYPE
-        DESCRIPTION.
+        temperature data.
     thr : TYPE
-        DESCRIPTION.
+        Threshhold for the left censoring.
 
     Returns
     -------
@@ -1081,7 +1097,7 @@ def TNX_obs_scaling_rate(P,T,qs,niter):
     Returns
     -------
     qhat : numpy.ndarray
-        [something, scaling rate].
+        [something, scaling rate]. #TODO: I dont know what this is
 
     """
     T = sm.add_constant(T)  # Add a constant (intercept) term
