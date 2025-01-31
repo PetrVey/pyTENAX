@@ -445,6 +445,28 @@ class TENAX():
     
     
     def associate_vars(self, dict_ordinary, data_temperature , dates_temperature ):
+        """
+        Get additional variables for the ordinary events #TODO: have no clue about this one
+
+        Parameters
+        ----------
+        dict_ordinary : TYPE
+            DESCRIPTION.
+        data_temperature : TYPE
+            DESCRIPTION.
+        dates_temperature : TYPE
+            DESCRIPTION.
+
+        Returns
+        -------
+        dict_ordinary : TYPE
+            DESCRIPTION.
+        dict_dropped_oe : TYPE
+            DESCRIPTION.
+        n_ordinary_per_year_new : TYPE
+            DESCRIPTION.
+
+        """
         #start here 
         dict_dropped_oe = {}
         time_index =dates_temperature.reshape(-1)
@@ -504,6 +526,30 @@ class TENAX():
         return dict_ordinary, dict_dropped_oe, n_ordinary_per_year_new
     
     def magnitude_model(self, data_oe_prec, data_oe_temp, thr):
+        """
+        Fits the data to the magnitude model of TENAX. 
+
+        Parameters
+        ----------
+        data_oe_prec : numpy.ndarray
+            Array of precipitation ordinary events data.
+        data_oe_temp : numpy.ndarray
+            Array of temperature ordinary events data.
+        thr : numpy.float64
+            Magnitude of precipitation threshold.
+
+        Returns
+        -------
+        phat : numpy.ndarray
+            Parameters of the magnitude model. [kappa_0,b,lambda_0,a].
+        loglik : numpy.float64
+            Log likelihood.
+        loglik_H1 : numpy.float64
+            Log likelihood of alternative hypothesis.
+        loglik_H0shape : numpy.float64
+            Log likelihood of null hypothesis.
+
+        """
         # alpha=0 --> dependence of shape on T is always allowed 
         # alpha=1 --> dependence of shape on T is never allowed 
         # else    --> dependence of shape on T depends on stat. significance
@@ -548,7 +594,27 @@ class TENAX():
             
         return phat, loglik, loglik_H1, loglik_H0shape
    
+
     def temperature_model(self, data_oe_temp, beta = 0, method="norm"):
+
+        """
+        Fits the temperature data to the TENAX temperature model.
+
+        Parameters
+        ----------
+        data_oe_temp : numpy.ndarray
+            Temperature data.
+        beta : float, optional
+            beta of the generalised normal distribution. if not defined, uses the beta defined in S. The default is 0.
+        method : string, optional
+            Type of fit. "norm" is for the generalised normal distribution. "skewnorm" is for a skewed normal distribution. The default is "norm".
+
+        Returns
+        -------
+        g_phat: numpy.array
+            parameters of the temperature distribution. if "norm", [shape,scale]. if "skewnorm", also has skew. #TODO: I couldnt actually figure which was which for the skewnorm g_phat
+
+        """
         if beta == 0:
             beta = self.beta
         else:
@@ -583,6 +649,39 @@ class TENAX():
     
     def model_inversion(self, F_phat, g_phat, n, Ts, gen_P_mc = False,gen_RL=True,
                         temp_method = "norm", method_root_scalar="brentq"):
+        """
+        Inversion of the TENAX model to predict return levels or plot model.
+
+        Parameters
+        ----------
+        F_phat : numpy.ndarray
+            distribution values. F_phat = [kappa_0,b,lambda_0,a].
+        g_phat : numpy.ndarray
+            [mu, sigma] of temperature distribution.
+        n : float
+            Mean number of ordinary events per year.
+        Ts : numpy.ndarray
+            Array of T values to use in the Monte Carlo.
+        gen_P_mc : bool, optional
+            Specify whether to generate Monte Carlo values for precipitation. The default is False.
+        gen_RL : bool, optional
+            Specify whether to generate return levels. The default is True.
+        temp_method : str, optional
+            Type of fit used for the temperature model. The default is "norm".
+        method_root_scalar : str, optional
+            method used for inversion. The default is "brentq".
+
+        Returns
+        -------
+        ret_lev : list (?) #TODO: check
+            Return levels at periods specified in self.return_period.
+        T_mc : numpy.ndarray
+            Monte Carlo generated temperature values.
+        P_mc : numpy.ndarray
+            Monte Carlo generated precipitation values.
+
+        """
+        
         P_mc = []
         ret_lev = []
         
@@ -725,18 +824,18 @@ class TENAX():
         
 def wbl_leftcensor_loglik(theta, x, t, thr):
     """
-    TODO: documentation
+    TODO: I dont understand these things
 
     Parameters
     ----------
-    theta : TYPE
-        DESCRIPTION.
-    x : TYPE
-        DESCRIPTION.
-    t : TYPE
-        DESCRIPTION.
-    thr : TYPE
-        DESCRIPTION.
+    theta : float
+        initial guess for fit.
+    x : numpy.ndarray
+        precipitation values.
+    t : numpy.ndarray
+        temperature values.
+    thr : float
+        threshold value for left-censoring.
 
     Returns
     -------
@@ -778,14 +877,14 @@ def wbl_leftcensor_loglik_H0shape(theta, x, t, thr):
 
     Parameters
     ----------
-    theta : TYPE
-        DESCRIPTION.
-    x : TYPE
-        DESCRIPTION.
-    t : TYPE
-        DESCRIPTION.
-    thr : TYPE
-        DESCRIPTION.
+    theta : float
+        initial guess for fit.
+    x : numpy.ndarray
+        precipitation values.
+    t : numpy.ndarray
+        temperature values.
+    thr : float
+        threshold value for left-censoring.
 
     Returns
     -------
@@ -1088,7 +1187,7 @@ def TNX_obs_scaling_rate(P,T,qs,niter):
     Returns
     -------
     qhat : numpy.ndarray
-        [something, scaling rate].
+        [something, scaling rate]. #TODO: I dont know what this is
 
     """
     T = sm.add_constant(T)  # Add a constant (intercept) term
