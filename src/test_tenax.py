@@ -38,6 +38,8 @@ S = TENAX(
         alpha = 0.05,
     )
 
+b_set = -0.01
+
 file_path_input =f"{RES_DIR}/prec_data_Aadorf.parquet"
 #Load data from csv file
 data=pd.read_parquet(file_path_input)
@@ -112,6 +114,9 @@ Ts = np.arange(np.min(T) - S.temp_delta, np.max(T) + S.temp_delta, S.temp_res_mo
 #TENAX MODEL HERE
 #magnitude model
 F_phat, loglik, _, _ = S.magnitude_model(P, T, thr)
+#with set be to check
+F_phat_b_set, _, _, _ = S.magnitude_model(P, T, thr,b_set=b_set)
+
 #temperature model
 g_phat = S.temperature_model(T)
 # M is mean n of ordinary events
@@ -171,6 +176,14 @@ qs = [.85,.95,.99,.999]
 TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs)
 plt.ylabel('10-minute precipitation (mm)')
 plt.title('fig 2a')
+plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
+plt.show()
+
+# fig 2a with set b #TODO: this can be removed, just to show it seems to be working
+qs = [.85,.95,.99,.999]
+TNX_FIG_magn_model(P,T,F_phat_b_set,thr,eT,qs)
+plt.ylabel('10-minute precipitation (mm)')
+plt.title(f'fig 2a with pre-defined b = {b_set}. F_phat = {F_phat_b_set}')
 plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 plt.show()
 
@@ -296,22 +309,17 @@ RL2_predict, _,_ = S.model_inversion(F_phat1,g_phat2_predict,n2,Ts)
 
 TNX_FIG_temp_model(T=T1, g_phat=g_phat1,beta=4,eT=eT,obscol='b',valcol='b',obslabel = None,vallabel = 'Temperature model '+str(yrs_unique[0])+'-'+str(midway))
 TNX_FIG_temp_model(T=T2, g_phat=g_phat2_predict,beta=4,eT=eT,obscol='r',valcol='r',obslabel = None,vallabel = 'Temperature model '+str(midway+1)+'-'+str(yrs_unique[-1])) # model based on temp ave and std changes
-<<<<<<< HEAD
-plt.title('Fig 7a')
-=======
+
 plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
->>>>>>> origin
 plt.show() #this is slightly different in code and paper I think.. using predicted T vs fitted T
 
 #fig 7b
 
 TNX_FIG_valid(AMS1,S.return_period,RL1,TENAXcol='b',obscol_shape = 'b+',TENAXlabel = 'The TENAX model '+str(yrs_unique[0])+'-'+str(midway),obslabel='Observed annual maxima '+str(yrs_unique[0])+'-'+str(midway))
 TNX_FIG_valid(AMS2,S.return_period,RL2_predict,TENAXcol='r',obscol_shape = 'r+',TENAXlabel = 'The predicted TENAX model '+str(midway+1)+'-'+str(yrs_unique[-1]),obslabel='Observed annual maxima '+str(midway+1)+'-'+str(yrs_unique[-1]))
-<<<<<<< HEAD
-plt.title('Fig 7b')
-=======
+
 plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
->>>>>>> origin
+
 plt.show()
 
 
@@ -403,10 +411,6 @@ plt.xscale('log')
 plt.xlim(1,200)
 plt.ylim(0,60)
 
-<<<<<<< HEAD
-plt.title('Fig 6')
-=======
->>>>>>> origin
 
 plt.show()
 
