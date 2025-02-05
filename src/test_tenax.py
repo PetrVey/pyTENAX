@@ -38,8 +38,6 @@ S = TENAX(
         alpha = 0.05,
     )
 
-b_set = -0.01
-
 file_path_input =f"{RES_DIR}/prec_data_Aadorf.parquet"
 #Load data from csv file
 data=pd.read_parquet(file_path_input)
@@ -114,9 +112,6 @@ Ts = np.arange(np.min(T) - S.temp_delta, np.max(T) + S.temp_delta, S.temp_res_mo
 #TENAX MODEL HERE
 #magnitude model
 F_phat, loglik, _, _ = S.magnitude_model(P, T, thr)
-#with set be to check
-F_phat_b_set, _, _, _ = S.magnitude_model(P, T, thr,b_set=b_set)
-
 #temperature model
 g_phat = S.temperature_model(T)
 # M is mean n of ordinary events
@@ -176,14 +171,6 @@ qs = [.85,.95,.99,.999]
 TNX_FIG_magn_model(P,T,F_phat,thr,eT,qs)
 plt.ylabel('10-minute precipitation (mm)')
 plt.title('fig 2a')
-plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
-plt.show()
-
-# fig 2a with set b #TODO: this can be removed, just to show it seems to be working
-qs = [.85,.95,.99,.999]
-TNX_FIG_magn_model(P,T,F_phat_b_set,thr,eT,qs)
-plt.ylabel('10-minute precipitation (mm)')
-plt.title(f'fig 2a with pre-defined b = {b_set}. F_phat = {F_phat_b_set}')
 plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 plt.show()
 
