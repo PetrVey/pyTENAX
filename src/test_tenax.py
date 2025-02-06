@@ -175,7 +175,7 @@ plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 plt.show()
 
 #fig 2b
-TNX_FIG_temp_model(T, g_phat,S.beta,eT)
+hist, pdf_values = TNX_FIG_temp_model(T, g_phat,S.beta,eT)
 plt.title('fig 2b')
 plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 plt.show()
@@ -224,9 +224,9 @@ combined_pdf = (winter_pdf*np.size(T_winter)+summer_pdf*np.size(T_summer))/(np.s
 #fig 3
 
 
-TNX_FIG_temp_model(T=T_summer, g_phat=g_phat_summer,beta=2,eT=eT,obscol='r',valcol='r',obslabel = None,vallabel = 'Summer',xlimits = [-15,30],ylimits = [0,0.1])
-TNX_FIG_temp_model(T=T_winter, g_phat=g_phat_winter,beta=2,eT=eT,obscol='b',valcol='b',obslabel = None,vallabel = 'Winter',xlimits = [-15,30],ylimits = [0,0.1])
-TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT,obscol='k',valcol='k',obslabel = None,vallabel = 'Annual',xlimits = [-15,30],ylimits = [0,0.1])
+_,_ = TNX_FIG_temp_model(T=T_summer, g_phat=g_phat_summer,beta=2,eT=eT,obscol='r',valcol='r',obslabel = None,vallabel = 'Summer',xlimits = [-15,30],ylimits = [0,0.1])
+_,_ = TNX_FIG_temp_model(T=T_winter, g_phat=g_phat_winter,beta=2,eT=eT,obscol='b',valcol='b',obslabel = None,vallabel = 'Winter',xlimits = [-15,30],ylimits = [0,0.1])
+_,_ = TNX_FIG_temp_model(T=T, g_phat=g_phat,beta=4,eT=eT,obscol='k',valcol='k',obslabel = None,vallabel = 'Annual',xlimits = [-15,30],ylimits = [0,0.1])
 plt.plot(eT,combined_pdf,'m',label = 'Combined summer and winter')
 
 plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
@@ -294,8 +294,8 @@ RL2_predict, _,_ = S.model_inversion(F_phat1,g_phat2_predict,n2,Ts)
 
 #fig 7a
 
-TNX_FIG_temp_model(T=T1, g_phat=g_phat1,beta=4,eT=eT,obscol='b',valcol='b',obslabel = None,vallabel = 'Temperature model '+str(yrs_unique[0])+'-'+str(midway))
-TNX_FIG_temp_model(T=T2, g_phat=g_phat2_predict,beta=4,eT=eT,obscol='r',valcol='r',obslabel = None,vallabel = 'Temperature model '+str(midway+1)+'-'+str(yrs_unique[-1])) # model based on temp ave and std changes
+_,_ = TNX_FIG_temp_model(T=T1, g_phat=g_phat1,beta=4,eT=eT,obscol='b',valcol='b',obslabel = None,vallabel = 'Temperature model '+str(yrs_unique[0])+'-'+str(midway))
+_,_ = TNX_FIG_temp_model(T=T2, g_phat=g_phat2_predict,beta=4,eT=eT,obscol='r',valcol='r',obslabel = None,vallabel = 'Temperature model '+str(midway+1)+'-'+str(yrs_unique[-1])) # model based on temp ave and std changes
 
 plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2))
 plt.show() #this is slightly different in code and paper I think.. using predicted T vs fitted T
