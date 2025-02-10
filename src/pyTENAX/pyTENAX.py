@@ -525,7 +525,7 @@ class TENAX():
         
         return dict_ordinary, dict_dropped_oe, n_ordinary_per_year_new
     
-    def magnitude_model(self, data_oe_prec, data_oe_temp, thr):
+    def magnitude_model(self, data_oe_prec, data_oe_temp, thr, b_set = None):
         """
         Fits the data to the magnitude model of TENAX. 
 
@@ -560,38 +560,50 @@ class TENAX():
         init_g = self.init_param_guess
         alpha = self.alpha
         
-        min_phat_H1 = minimize(lambda theta: -wbl_leftcensor_loglik(theta, P, T, thr), 
-                               init_g, 
-                               method='Nelder-Mead')
-        phat_H1 = min_phat_H1.x
+        if b_set: 
+            min_phat_bset = minimize(lambda theta: -wbl_leftcensor_loglik_bset(theta, P, T, thr,b_set), 
+                                   init_g, 
+                                   method='Nelder-Mead')
+            phat_bset = min_phat_bset.x
+            loglik_bset = wbl_leftcensor_loglik_bset(phat_bset,P,T,thr,b_set)
+            phat_bset[1] = b_set
+            phat = phat_bset
+            loglik = loglik_bset
+            loglik_H1, loglik_H0shape = None, None #TODO: figure this out, do we need these outputs?
         
-        min_phat_H0shape = minimize(lambda theta: -wbl_leftcensor_loglik_H0shape(theta, P, T, thr), 
-                               init_g, 
-                               method='Nelder-Mead',
-                               options={'xatol': 1e-8, 'fatol': 1e-8, 'maxiter': 1000})
-        
-        phat_H0shape = min_phat_H0shape.x
-        phat_H0shape[1] = 0
-        
-        loglik_H1 = wbl_leftcensor_loglik(phat_H1,P,T,thr)
-        loglik_H0shape = wbl_leftcensor_loglik_H0shape(phat_H0shape,P,T,thr)
-        lambda_LR_shape = -2*( loglik_H0shape - loglik_H1 )
-        pval = chi2.sf(lambda_LR_shape, df=1)
-        
-        
-        if alpha==0 : # dependence of shape on T is always allowed 
-            phat = phat_H1;
-            loglik = loglik_H1;
-        elif alpha==1 : # dependence of shape on T is never allowed 
-            phat = phat_H0shape;
-            loglik = loglik_H0shape;
-        elif pval<=alpha : # depends on stat. significance
-            phat = phat_H1;
-            loglik = loglik_H1;
         else:
-            phat = phat_H0shape;
-            loglik = loglik_H0shape;
+            min_phat_H1 = minimize(lambda theta: -wbl_leftcensor_loglik(theta, P, T, thr), 
+                                   init_g, 
+                                   method='Nelder-Mead')
+            phat_H1 = min_phat_H1.x
             
+            min_phat_H0shape = minimize(lambda theta: -wbl_leftcensor_loglik_H0shape(theta, P, T, thr), 
+                                   init_g, 
+                                   method='Nelder-Mead',
+                                   options={'xatol': 1e-8, 'fatol': 1e-8, 'maxiter': 1000})
+            
+            phat_H0shape = min_phat_H0shape.x
+            phat_H0shape[1] = 0
+            
+            loglik_H1 = wbl_leftcensor_loglik(phat_H1,P,T,thr)
+            loglik_H0shape = wbl_leftcensor_loglik_H0shape(phat_H0shape,P,T,thr)
+            lambda_LR_shape = -2*( loglik_H0shape - loglik_H1 )
+            pval = chi2.sf(lambda_LR_shape, df=1)
+            
+            
+            if alpha==0 : # dependence of shape on T is always allowed 
+                phat = phat_H1;
+                loglik = loglik_H1;
+            elif alpha==1 : # dependence of shape on T is never allowed 
+                phat = phat_H0shape;
+                loglik = loglik_H0shape;
+            elif pval<=alpha : # depends on stat. significance
+                phat = phat_H1;
+                loglik = loglik_H1;
+            else:
+                phat = phat_H0shape;
+                loglik = loglik_H0shape;
+                
         return phat, loglik, loglik_H1, loglik_H0shape
    
 
@@ -921,6 +933,56 @@ def wbl_leftcensor_loglik_H0shape(theta, x, t, thr):
 
     return loglik
 
+def wbl_leftcensor_loglik_bset(theta, x, t, thr,b_set):
+    """
+
+    Parameters
+    ----------
+    theta : float
+        initial guess for fit.
+    x : numpy.ndarray
+        precipitation values.
+    t : numpy.ndarray
+        temperature values.
+    thr : float
+        threshold value for left-censoring.
+    b_set : float
+        chosen b value that will not change
+
+    Returns
+    -------
+    loglik : TYPE
+        DESCRIPTION.
+
+    """
+    #theta is init guess
+    # x is precipitaon\
+    # t is temperature
+    # thr is threshold value (exact, no percentual)
+    a_w = theta[0]
+    b_w = b_set
+    a_C = theta[2]
+    b_C = theta[3]
+
+    # Apply conditions based on the threshold
+    t0 = t[x < thr]
+    shapes0 = a_w + b_w * t0
+    scales0 = a_C * np.exp(b_C * t0)
+    
+    x1 = x[x >= thr]
+    t1 = t[x >= thr]
+    shapes1 = a_w + b_w * t1
+    scales1 = a_C * np.exp(b_C * t1)
+
+    # Calculate the log-likelihood components
+    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
+    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
+
+    # Sum the components for the final log-likelihood
+    loglik = loglik1 + loglik2
+
+    return loglik
+
 def gen_norm_pdf(x, mu, sigma, beta):
     """
     Generalized normal distribution PDF.
@@ -1114,7 +1176,10 @@ def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',
 
     Returns
     -------
-    None.
+    hist : numpy.ndarray
+        pdf values of observed distribution.
+    pdf_values : numpy.ndarray
+        pdf values of fitted model.
 
     """
     
@@ -1142,6 +1207,7 @@ def TNX_FIG_temp_model(T, g_phat, beta, eT, obscol='r',valcol='b',
     plt.legend(fontsize=8) #NEED TO SET LOCATION OF THIS, maybe fontsize is too small as well
     plt.tick_params(axis='both', which='major', labelsize=14)
     
+    return hist, pdf_values
     
 def inverse_magnitude_model(F_phat,eT,qs):
     """
