@@ -45,23 +45,29 @@ class SMEV:
         self.left_censoring = left_censoring if left_censoring is not None else [0, 1]
 
     def get_ordinary_events(
-        self, data: np.ndarray, dates, name_col="value", check_gaps=True
+        self,
+        data: Union[pd.DataFrame, np.ndarray],
+        dates,
+        name_col="value",
+        check_gaps=True,
     ) -> list:
-        """
+        """Function that extracts ordinary precipitation events out of the entire data.
 
-        Function that extracts ordinary precipitation events out of the entire data.
+        ..todo::
+            Bit clumsy function, maybe better to split it into smaller functions.
+            Also, is support for both pd.DataFrame and np.ndarray necessary?
 
-        Parameters
-        ----------
-        - data np.array: array containing the hourly values of precipitation.
-        - separation (int): The number of hours used to define an independet ordianry event. Defult: 24 hours. this is saved in SMEV S class
-                        Days with precipitation amounts above this threshold are considered as ordinary events.
-        - pr_field (string): The name of the df column with precipitation values.
-        - hydro_year_field (string): The name of the df column with hydrological years values.
+        Args:
+            data (Union[pd.DataFrame, np.ndarray]): Data with precipitation values.
+            dates (list): List with dates of precipitation values.\
+                Only relevant if `data` is an array or if `check_gaps==True`.
+            name_col (str, optional): Column name in `data` for precipitation values.\
+                Only relevant if `data` is a dataframe. Defaults to "value".
+            check_gaps (bool, optional): Check for gaps in precipitation time series. \
+                Defaults to True.
 
-        Returns
-        -------
-        - consecutive_values np.array: index of time of consecutive values defining the ordinary events.
+        Returns:
+            list: Consecutive values above `self.threshold` separated by more `self.seperation`.
         """
         if isinstance(data, pd.DataFrame):
             # Find values above threshold
@@ -69,7 +75,7 @@ class SMEV:
             # Find consecutive values above threshold separated by more than 24 observations
             consecutive_values = []
             temp = []
-            for index, row in above_threshold.iterrows():
+            for index, _ in above_threshold.iterrows():
                 if not temp:
                     temp.append(index)
                 else:
