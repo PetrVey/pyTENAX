@@ -87,7 +87,7 @@ class TENAX:
         tolerance=0.1,
         min_ev_dur=30,
         separation=24,
-        left_censoring=[0, 1],
+        left_censoring: list = [0, 1],
         niter_smev=100,  # why is this here?
         niter_tnx=100,
         temp_res_monte_carlo=0.001,
@@ -159,7 +159,9 @@ class TENAX:
         self.init_param_guess = init_param_guess
         self.min_rain = min_rain
 
-    def remove_incomplete_years(self, data_pr, name_col="value", nan_to_zero=True):
+    def remove_incomplete_years(
+        self, data_pr: pd.DataFrame, name_col="value", nan_to_zero=True
+    ) -> pd.DataFrame:
         """
         Function that delete incomplete years in precipitation data.
 
@@ -205,7 +207,13 @@ class TENAX:
         self.time_resolution = time_res
         return data_cleanded
 
-    def get_ordinary_events(self, data, dates, name_col="value", check_gaps=True):
+    def get_ordinary_events(
+        self,
+        data: Union[np.ndarray, pd.DataFrame],
+        dates,
+        name_col="value",
+        check_gaps=True,
+    ) -> list:
         """
 
         Function that extracts ordinary precipitation events out of the entire data.
@@ -428,7 +436,9 @@ class TENAX:
 
         return arr_vals, arr_dates, n_ordinary_per_year
 
-    def get_ordinary_events_values(self, data, dates, arr_dates_oe):
+    def get_ordinary_events_values(
+        self, data: np.ndarray, dates: np.ndarray, arr_dates_oe
+    ):
         """
         Parameters
         ----------
