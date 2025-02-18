@@ -47,7 +47,7 @@ class SMEV:
     def get_ordinary_events(
         self,
         data: Union[pd.DataFrame, np.ndarray],
-        dates,
+        dates: list,
         name_col="value",
         check_gaps=True,
     ) -> list:
