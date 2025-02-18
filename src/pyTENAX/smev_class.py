@@ -7,29 +7,41 @@ https://github.com/luigicesarini/pysmev/blob/main/src/pysmev/smev_class.py
 import math
 import numpy as np
 import pandas as pd
-from typing import Union
+from typing import Union, Tuple
 import statsmodels.api as sm
 
 
 class SMEV:
     def __init__(
         self,
-        threshold,
+        threshold: float,
         separation: int,
         return_period: list[Union[int, float]],
-        durations: list[Union[int, float]],
+        durations: list[int],
         time_resolution,
         min_duration: Union[None, int] = None,
         left_censoring: Union[None, list] = None,
     ):
+        """Initiates SMEV class.
+
+        Args:
+            threshold (float): Minimum precipitation value to consider as a storm.
+            separation (int): Separation time between independent storms [min]
+            return_period (list[Union[int, float]]): List of return periods of interest [years].
+            durations (list[Union[int]]): List of durations of interest [min].
+            time_resolution (_type_): _description_
+            min_duration (Union[None, int], optional): Minimum duration of storm [min]. Defaults to None.\
+                If None, it is set to 0.
+            left_censoring (Union[None, list], optional): 2-elements list with the limits in probability \
+                of the data to be used for the parameters estimation. Defaults to None.\
+                If None, it is set to [0, 1].
+        """
         self.threshold = threshold
         self.separation = separation
         self.return_period = return_period
         self.durations = durations
-        self.time_resolution = time_resolution  # time resolution
-        self.min_duration = (
-            min_duration if min_duration is not None else 0
-        )  # min duration of precipitation
+        self.time_resolution = time_resolution
+        self.min_duration = min_duration if min_duration is not None else 0
         self.left_censoring = left_censoring if left_censoring is not None else [0, 1]
 
     def get_ordinary_events(
@@ -50,10 +62,6 @@ class SMEV:
         Returns
         -------
         - consecutive_values np.array: index of time of consecutive values defining the ordinary events.
-
-
-        Examples
-        --------
         """
         if isinstance(data, pd.DataFrame):
             # Find values above threshold
@@ -161,26 +169,21 @@ class SMEV:
 
         return consecutive_values
 
-    def remove_short(self, list_ordinary: list, min_duration: int):
-        """
+    def remove_short(
+        self, list_ordinary: list, min_duration: int
+    ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame, float]:
+        """Function that removes ordinary events too short.
+        Also, it calculates the mean number of ordinary events per year after removal.
 
-        Function that removes ordinary events too short.
+        Args:
+            list_ordinary (list): List with all ordinary events.
+            min_duration (int): Minimum duration of storm [min].
 
-        Parameters
-        ----------
-        - self.time_resolution: Used to calculate lenght of storm
-        - list_ordinary list: list of indices of ordinary events as returned by `get_ordinary_events`.
-        - min_duration (int): minimun number of minutes tto define an event.
-        - pr_field (string): The name of the df column with precipitation values.
-        - hydro_year_field (string): The name of the df column with hydrological years values.
-
-        Returns
-        -------
-        - consecutive_values np.array: index of time of consecutive values defining the ordinary events.
-
-
-        Examples
-        --------
+        Returns:
+            np.ndarray: Array with values of ordinary events.
+            np.ndarray: Array with dates of ordinary events.
+            pd.DataFrame: Dataframe with number of ordinary events per year.
+            float: Mean number of ordinary events per year.
         """
         if isinstance(list_ordinary[0][0], pd.Timestamp):
             ll_short = [

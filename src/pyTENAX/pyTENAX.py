@@ -52,7 +52,7 @@ class TENAX:
     min_ev_dur : int
         Minimum event duration [min]
     separation : int
-        Separation time between idependent storms [min]
+        Separation time between independent storms [min]
     left_censoring : list
         Left-censoring threshold [percentile]; see Marra et al. 2023 (https://doi.org/10.1016/j.advwatres.2023.104388)
     niter_smev : int
@@ -79,7 +79,7 @@ class TENAX:
     def __init__(
         self,
         return_period: list[Union[int, float]],
-        durations: list[Union[int, float]],
+        durations: list[int],
         beta=4,
         temp_time_hour=-24,
         alpha=0.05,
