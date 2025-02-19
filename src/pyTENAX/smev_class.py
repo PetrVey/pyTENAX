@@ -296,24 +296,19 @@ class SMEV:
 
         return weibull_param
 
-    def smev_return_values(self, return_period, shape, scale, n):
-        """
+    def smev_return_values(
+        self, return_period: int, shape: float, scale: float, n: float
+    ) -> float:
+        """Function that calculates return values (here, rainfall intensity) acoording to parameters of the Weibull distribution.
 
-        Function that calculates return values acoording to parameters of the Weibull distribution
+        Args:
+            return_period (int): Return period of interest.
+            shape (float): Shape parameter value.
+            scale (float): Scale parameter value.
+            n (float): SMEV parameter `n`.
 
-        Parameters
-        ----------
-        - return_period (int): The desired return period for which intensity is calculated.
-        - shape (float): Weibull distribution shape parameter
-        - scale (float): Weibull distribution scale parameter
-        - n (float): Mean number of ordinary events per year
-
-        Returns
-        -------
-        - intensity (float): The corresponding intensity value.
-
-        Examples
-        --------
+        Returns:
+            float: Rainfall intensity value.
         """
 
         return_period = np.asarray(return_period)
