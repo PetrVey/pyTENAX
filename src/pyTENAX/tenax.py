@@ -9,10 +9,9 @@ from scipy.optimize import root_scalar
 import time
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
-from packaging.version import parse
 from scipy.optimize import curve_fit
 
-from typing import Union
+from typing import Union, Tuple
 
 
 class TENAX:
@@ -20,6 +19,7 @@ class TENAX:
         self,
         return_period: list[Union[int, float]],
         durations: list[int],
+        time_resolution: int,
         beta: Union[float, int] = 4,
         temp_time_hour: int = 24,
         alpha=0.05,
@@ -65,6 +65,7 @@ class TENAX:
         """
         self.return_period = return_period
         self.durations = durations
+        self.time_resolution = time_resolution
         self.beta = beta
         self.temp_time_hour = temp_time_hour if temp_time_hour < 0 else -temp_time_hour
         self.alpha = alpha
@@ -79,6 +80,8 @@ class TENAX:
         self.temp_delta = temp_delta
         self.init_param_guess = init_param_guess
         self.min_rain = min_rain
+
+        self.__incomplete_years_removed__ = False
 
     def remove_incomplete_years(
         self, data_pr: pd.DataFrame, name_col="value", nan_to_zero=True
@@ -97,14 +100,9 @@ class TENAX:
         # Step 1: get resolution of dataset (MUST BE SAME in whole dataset!!!)
         time_res = (data_pr.index[-1] - data_pr.index[-2]).total_seconds() / 60
         # Step 2: Resample by year and count total and NaN values
-        if parse(pd.__version__) > parse("2.2"):
-            yearly_valid = data_pr.resample("YE").apply(
-                lambda x: x.notna().sum()
-            )  # Count not NaNs per year
-        else:
-            yearly_valid = data_pr.resample("Y").apply(
-                lambda x: x.notna().sum()
-            )  # Count not NaNs per year
+        yearly_valid = data_pr.resample("YE").apply(
+            lambda x: x.notna().sum()
+        )  # Count not NaNs per year
         # Step 3: Estimate expected lenght of yearly timeseries
         expected = pd.DataFrame(index=yearly_valid.index)
         expected["Total"] = 1440 / time_res * 365
@@ -119,6 +117,9 @@ class TENAX:
             data_cleanded.loc[:, name_col] = data_cleanded[name_col].fillna(0)
 
         self.time_resolution = time_res
+
+        self.__incomplete_years_removed__ = True
+
         return data_cleanded
 
     def get_ordinary_events(
@@ -256,99 +257,81 @@ class TENAX:
         return consecutive_values
 
     def remove_short(
-        self, list_ordinary: list, time_resolution: Union[None, int] = None
-    ):
+        self, list_ordinary: list
+    ) -> Tuple[np.ndarray, np.ndarray, pd.Series]:
+        """Function that removes ordinary events too short.
+
+        Args:
+            list_ordinary (list): list of indices of ordinary events as returned by `get_ordinary_events()`.
+
+        Returns:
+            np.ndarray: Array with indices of events that are not too short.
+            np.ndarray: Array with tuple consisting of start and end dates of events that are not too short.
+            pd.Series: Series with the number of ordinary events per year.
         """
-
-        Function that removes ordinary events too short.
-
-        Parameters
-        ----------
-        - list_ordinary list: list of indices of ordinary events as returned by `get_ordinary_events`.
-        - time_resolution: Used to calculate lenght of storm
-        Returns
-        -------
-        - arr_vals : boolean array,
-        - arr_dates : dates of OE in TO, FROM format
-        - n_ordinary_per_year: count of OE in each years
-
-        Examples
-        --------
-        """
-        try:
-            if time_resolution is None:
-                self.time_resolution
-            else:
-                self.time_resolution = time_resolution
-
-            if isinstance(list_ordinary[0][0], pd.Timestamp):
-                # event is multiplied by its lenght to get duration and compared with min_duration setup
-                ll_short = [
-                    True
-                    if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
-                    >= pd.Timedelta(minutes=self.min_ev_dur)
-                    else False
-                    for ev in list_ordinary
-                ]
-                ll_dates = [
-                    (
-                        ev[-1].strftime("%Y-%m-%d %H:%M:%S"),
-                        ev[0].strftime("%Y-%m-%d %H:%M:%S"),
-                    )
-                    if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
-                    >= pd.Timedelta(minutes=self.min_ev_dur)
-                    else (np.nan, np.nan)
-                    for ev in list_ordinary
-                ]
-                arr_vals = np.array(ll_short)[ll_short]
-                arr_dates = np.array(ll_dates)[ll_short]
-
-                filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
-                list_year = pd.DataFrame(
-                    [filtered_list[_][0].year for _ in range(len(filtered_list))],
-                    columns=["year"],
-                )
-                n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
-                # n_ordinary=n_ordinary_per_year.mean().values.item()
-            elif isinstance(list_ordinary[0][0], np.datetime64):
-                ll_short = [
-                    True
-                    if (ev[-1] - ev[0]).astype("timedelta64[m]")
-                    + np.timedelta64(int(self.time_resolution), "m")
-                    >= pd.Timedelta(minutes=self.min_ev_dur)
-                    else False
-                    for ev in list_ordinary
-                ]
-                ll_dates = [
-                    (ev[-1], ev[0])
-                    if (ev[-1] - ev[0]).astype("timedelta64[m]")
-                    + np.timedelta64(int(self.time_resolution), "m")
-                    >= pd.Timedelta(minutes=self.min_ev_dur)
-                    else (np.nan, np.nan)
-                    for ev in list_ordinary
-                ]
-                arr_vals = np.array(ll_short)[ll_short]
-                arr_dates = np.array(ll_dates)[ll_short]
-
-                filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
-                list_year = pd.DataFrame(
-                    [
-                        filtered_list[_][0].astype("datetime64[Y]").item().year
-                        for _ in range(len(filtered_list))
-                    ],
-                    columns=["year"],
-                )
-                n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
-                # n_ordinary=n_ordinary_per_year.mean().values.item()
-
-        except ValueError:
-            print("Warning !!!! Warning !!!! Warning !!!! Warning !!!! Warning !!!!")
-            print("Warning !!!! Warning !!!! Warning !!!! Warning !!!! Warning !!!!")
-
-            print(
-                "You did not run 'remove_incomplete_years' before OR time_resolution not provided"
+        if not self.__incomplete_years_removed__:
+            raise ValueError(
+                "You must run 'remove_incomplete_years' before running this function."
             )
-            arr_vals, arr_dates, n_ordinary_per_year = np.nan, np.nan, np.nan
+
+        if isinstance(list_ordinary[0][0], pd.Timestamp):
+            # event is multiplied by its lenght to get duration and compared with min_duration setup
+            ll_short = [
+                True
+                if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
+                >= pd.Timedelta(minutes=self.min_event_duration)
+                else False
+                for ev in list_ordinary
+            ]
+            ll_dates = [
+                (
+                    ev[-1].strftime("%Y-%m-%d %H:%M:%S"),
+                    ev[0].strftime("%Y-%m-%d %H:%M:%S"),
+                )
+                if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
+                >= pd.Timedelta(minutes=self.min_event_duration)
+                else (np.nan, np.nan)
+                for ev in list_ordinary
+            ]
+            arr_vals = np.array(ll_short)[ll_short]
+            arr_dates = np.array(ll_dates)[ll_short]
+
+            filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
+            list_year = pd.DataFrame(
+                [filtered_list[_][0].year for _ in range(len(filtered_list))],
+                columns=["year"],
+            )
+            n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
+
+        elif isinstance(list_ordinary[0][0], np.datetime64):
+            ll_short = [
+                True
+                if (ev[-1] - ev[0]).astype("timedelta64[m]")
+                + np.timedelta64(int(self.time_resolution), "m")
+                >= pd.Timedelta(minutes=self.min_ev_dur)
+                else False
+                for ev in list_ordinary
+            ]
+            ll_dates = [
+                (ev[-1], ev[0])
+                if (ev[-1] - ev[0]).astype("timedelta64[m]")
+                + np.timedelta64(int(self.time_resolution), "m")
+                >= pd.Timedelta(minutes=self.min_ev_dur)
+                else (np.nan, np.nan)
+                for ev in list_ordinary
+            ]
+            arr_vals = np.array(ll_short)[ll_short]
+            arr_dates = np.array(ll_dates)[ll_short]
+
+            filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
+            list_year = pd.DataFrame(
+                [
+                    filtered_list[_][0].astype("datetime64[Y]").item().year
+                    for _ in range(len(filtered_list))
+                ],
+                columns=["year"],
+            )
+            n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
 
         return arr_vals, arr_dates, n_ordinary_per_year
 
@@ -482,7 +465,7 @@ class TENAX:
                 direction="nearest",
             )
 
-            for idx, row in merged.iterrows():
+            for _, row in merged.iterrows():
                 end_time = row["time_index"]
 
                 # Find the index of the closest time directly using `np.searchsorted`
