@@ -16,138 +16,65 @@ from typing import Union
 
 
 class TENAX:
-    """
-    A class used to represent the TENAX model
-
-    TEmperaturedependent Non-Asymptotic statistical model for eXtreme
-    return levels (TENAX), is based on a parsimonious nonstationary and
-    non-asymptotic theoretical framework that incorporates temperature as a covariate
-    in a physically consistent manner.
-
-    Attributes:
-    -----------
-    return_period : list
-        Return periods [y]
-    durations : list
-        Duration of interest [min]; same as precipitation input in this example.
-    beta : float
-        Shape parameter of the Generalized Normal for g(T)
-    temp_time_hour : int (negative)
-        Time window to compute T [h]
-    alpha : float
-        Significance level for the dependence of the shape on T [-]
-        alpha=0 --> dependence of shape on T is always allowed
-        alpha=1 --> dependence of shape on T is never allowed
-        alpha   --> dependence of shape on T depends on stat. significance at the alpha-level
-    n_monte_carlo : int
-        Number of elements in the MC samples [-]
-    tolerance : float
-        Max fraction of missing data in one year [-]
-    min_ev_dur : int
-        Minimum event duration [min]
-    separation : int
-        Separation time between independent storms [min]
-    left_censoring : list
-        Left-censoring threshold [percentile]; see Marra et al. 2023 (https://doi.org/10.1016/j.advwatres.2023.104388)
-    niter_smev : int
-        Number of iterations for uncertainty for the SMEV model [-]
-    niter_tnx :int
-        Number of iterations for uncertainty for the TENAX model [-]; in the paper we used 1e3
-    temp_res_monte_carlo  : float
-        Resolution in T for the MC samples [-]
-    temp_delta : int
-        Range in T of MC samples [-]; explores temperatures up to Tdelt degrees higher and lower of the observed ones
-    init_param_guess : list
-        Initial values of Weibull parameters for fminsearch [-]
-
-    Methods:
-    --------
-    __init__(self, return_period, durations, beta=4, temp_time_hour, alpha,
-             n_monte_carlo, tolerance, min_ev_dur, separation, left_censoring,
-             niter_smev, niter_tnx,  temp_res_monte_carlo , temp_delta, init_param_guess):
-        Initializes the TENAX class with the provided parameters.
-
-
-    """
-
     def __init__(
         self,
         return_period: list[Union[int, float]],
         durations: list[int],
-        beta=4,
-        temp_time_hour=-24,
+        beta: Union[float, int] = 4,
+        temp_time_hour: int = 24,
         alpha=0.05,
         n_monte_carlo=int(2e4),
         tolerance=0.1,
-        min_ev_dur=30,
-        separation=24,
+        min_event_duration=30,
+        storm_separation_time=24,
         left_censoring: list = [0, 1],
         niter_smev=100,  # why is this here?
-        niter_tnx=100,
+        niter_tenax=1000,
         temp_res_monte_carlo=0.001,
         temp_delta=10,
         init_param_guess=[0.7, 0, 2, 0],
-        min_rain=0,
-    ):
+        min_rain: Union[float, int] = 0,
+    ) -> None:
+        """Initialize the TENAX model with the specified parameters.
+
+        The TEmperaturedependent Non-Asymptotic statistical model for eXtreme
+        return levels (TENAX), is based on a parsimonious nonstationary and
+        non-asymptotic theoretical framework that incorporates temperature as a covariate
+        in a physically consistent manner.
+
+        Args:
+            return_period (list[Union[int, float]]): Return periods [years].
+            durations (list[int]): Duration of interest [min].
+            beta (Union[float, int], optional): Shape parameter of the Generalized Normal for g(T). Defaults to 4.
+            temp_time_hour (int, optional): Time window to compute T [h]. Will be converted to negative if needed. Defaults to 24.
+            alpha (float, optional): Unitless significance level for the dependence of the shape on T. Defaults to 0.05.
+                - alpha = 0 --> dependence of shape on T is always allowed.
+                - alpha = 1 --> dependence of shape on T is never allowed.
+                - 0 < alpha < 1 --> dependence of shape on T depends on statistical significance at the alpha-level.
+            n_monte_carlo (int, optional): Number of elements in the MC samples. Defaults to int(2e4).
+            tolerance (float, optional): Maximum allowed fraction of missing data in one year. If exceeded, year will be disregarded from samples. Defaults to 0.1.
+            min_event_duration (int, optional): Minimum event duration [min]. Defaults to 30.
+            storm_separation_time (int, optional): Separation time between independent storms [hours]. Defaults to 24.
+            left_censoring (list, optional): 2-elements list with the limits in probability of the data to be used for the parameters estimation. Defaults to [0, 1].
+            niter_smev (int, optional): Number of iterations for uncertainty for the SMEV model. Defaults to 100.
+            niter_tenax (int, optional): Number of iterations for uncertainty for the TENAX model. Defaults to 1000.
+            temp_res_monte_carlo (float, optional): Resolution in T for the MC samples. Defaults to 0.001.
+            temp_delta (int, optional): Range in T of MC samples. Explores temperatures up to Tdelt degrees higher and lower of the observed ones. Defaults to 10.
+            init_param_guess (list, optional): Initial values of Weibull parameters for `fminsearch`. Defaults to [0.7, 0, 2, 0].
+            min_rain (Union[float, int], optional): Minimum rainfall value. Defaults to 0.
         """
-        Initialize the TENAX model with the specified parameters.
-
-        Parameters:
-        -----------
-        return_period : list
-            Return periods [years]
-        durations : list
-            Duration of interest [min]; same as precipitation input in this example.
-        beta : float
-            Shape parameter of the Generalized Normal for g(T)
-        temp_time_hour : int (negative)
-            Time window to compute T [h]
-        alpha : float
-            Significance level for the dependence of the shape on T [-]
-            alpha=0 --> dependence of shape on T is always allowed
-            alpha=1 --> dependence of shape on T is never allowed
-            alpha   --> dependence of shape on T depends on stat. significance at the alpha-level
-        n_monte_carlo : int
-            Number of elements in the MC samples [-]
-        tolerance : float
-            Max fraction of missing data in one year [-]
-        min_ev_dur : int
-            Minimum event duration [min]
-        separation : int
-            Separation time between idependent storms [hours]
-        left_censoring : list
-            Left-censoring threshold [percentile]; see Marra et al. 2023 (https://doi.org/10.1016/j.advwatres.2023.104388)
-        niter_smev : int
-            Number of iterations for uncertainty for the SMEV model [-]
-        niter_tnx :int
-            Number of iterations for uncertainty for the TENAX model [-]; in the paper we used 1e3
-        temp_res_monte_carlo  : float
-            Resolution in T for the MC samples [-]
-        temp_delta : int
-            Range in T of MC samples [-]; explores temperatures up to Tdelt degrees higher and lower of the observed ones
-        init_param_guess : list
-            Initial values of Weibull parameters for fminsearch [-]
-        min_rain : float
-            minimum rainfall value,
-            reason --> Climate models has issue with too small float values (drizzles, eg. 0.0099mm/h)
-                   --> Another reason is that the that rain gauge tipping bucket has min value
-
-        """
-
         self.return_period = return_period
         self.durations = durations
         self.beta = beta
-        self.temp_time_hour = (
-            temp_time_hour if temp_time_hour < 0 else -temp_time_hour
-        )  # be sure this is negative
+        self.temp_time_hour = temp_time_hour if temp_time_hour < 0 else -temp_time_hour
         self.alpha = alpha
         self.n_monte_carlo = n_monte_carlo
         self.tolerance = tolerance
-        self.min_ev_dur = min_ev_dur
-        self.separation = separation
+        self.min_event_duration = min_event_duration
+        self.storm_separation_time = storm_separation_time
         self.left_censoring = left_censoring
         self.niter_smev = niter_smev
-        self.niter_tnx = niter_tnx
+        self.niter_tenax = niter_tenax
         self.temp_res_monte_carlo = temp_res_monte_carlo
         self.temp_delta = temp_delta
         self.init_param_guess = init_param_guess
@@ -156,23 +83,16 @@ class TENAX:
     def remove_incomplete_years(
         self, data_pr: pd.DataFrame, name_col="value", nan_to_zero=True
     ) -> pd.DataFrame:
-        """
-        Function that delete incomplete years in precipitation data.
+        """Function that delete incomplete years in precipitation data.
+        An incomplete year is defined as a year where observations are missing above a given threshold.
 
-        Parameters
-        ----------
-        data_pr : pd dataframe
-            dataframe containing the hourly values of precipitation
-        name_col : string
-            name of column where variable values are stored
-        nan_to_zero: bool
-            push nan to zero
+        Args:
+            data_pr (pd.DataFrame): Dataframe containing (hourly) precipitation values.
+            name_col (str, optional): Column name in `data_pr` with precipitation values. Defaults to "value".
+            nan_to_zero (bool, optional): Set `nan` to zero. Defaults to True.
 
-        Returns
-        -------
-        data_cleanded: pd dataframe
-           cleaned dataset.
-
+        Returns:
+            pd.DataFrame: Dataframe containing (hourly) precipitation values with incomplete years removed.
         """
         # Step 1: get resolution of dataset (MUST BE SAME in whole dataset!!!)
         time_res = (data_pr.index[-1] - data_pr.index[-2]).total_seconds() / 60
@@ -335,7 +255,9 @@ class TENAX:
 
         return consecutive_values
 
-    def remove_short(self, list_ordinary: list, time_resolution=None):
+    def remove_short(
+        self, list_ordinary: list, time_resolution: Union[None, int] = None
+    ):
         """
 
         Function that removes ordinary events too short.
