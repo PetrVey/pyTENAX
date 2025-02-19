@@ -1,11 +1,8 @@
 import pandas as pd
 import numpy as np
-from scipy.stats import weibull_min
-from scipy.optimize import minimize
-from scipy.stats import chi2
 from scipy.special import gamma
-from scipy.stats import norm, skewnorm
-from scipy.optimize import root_scalar
+from scipy.stats import weibull_min, norm, skewnorm, chi2
+from scipy.optimize import root_scalar, minimize
 import time
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
@@ -29,7 +26,7 @@ class TENAX:
         storm_separation_time=24,
         left_censoring: list = [0, 1],
         niter_smev=100,  # why is this here?
-        niter_tenax=1000,
+        niter_tenax=100,
         temp_res_monte_carlo=0.001,
         temp_delta=10,
         init_param_guess=[0.7, 0, 2, 0],
@@ -57,7 +54,7 @@ class TENAX:
             storm_separation_time (int, optional): Separation time between independent storms [hours]. Defaults to 24.
             left_censoring (list, optional): 2-elements list with the limits in probability of the data to be used for the parameters estimation. Defaults to [0, 1].
             niter_smev (int, optional): Number of iterations for uncertainty for the SMEV model. Defaults to 100.
-            niter_tenax (int, optional): Number of iterations for uncertainty for the TENAX model. Defaults to 1000.
+            niter_tenax (int, optional): Number of iterations for uncertainty for the TENAX model. Defaults to 100.
             temp_res_monte_carlo (float, optional): Resolution in T for the MC samples. Defaults to 0.001.
             temp_delta (int, optional): Range in T of MC samples. Explores temperatures up to Tdelt degrees higher and lower of the observed ones. Defaults to 10.
             init_param_guess (list, optional): Initial values of Weibull parameters for `fminsearch`. Defaults to [0.7, 0, 2, 0].
@@ -159,7 +156,9 @@ class TENAX:
                 if not temp:
                     temp.append(index)
                 else:
-                    if index - temp[-1] > pd.Timedelta(hours=self.separation):
+                    if index - temp[-1] > pd.Timedelta(
+                        hours=self.storm_separation_time
+                    ):
                         if len(temp) >= 1:
                             consecutive_values.append(temp)
                         temp = []
@@ -184,7 +183,7 @@ class TENAX:
                     # numpy delta is in nanoseconds, it  might be better to do dates[index] - dates[temp[-1]]).item() / np.timedelta64(1, 'm')
                     if (
                         (dates[index] - dates[temp[-1]]).item()
-                        > (self.separation * 3.6e12)
+                        > (self.storm_separation_time * 3.6e12)
                     ):  # Assuming 24 is the number of hours, nanoseconds * 3.6e+12 = hours
                         if len(temp) >= 1:
                             consecutive_values.append(dates[temp])
@@ -196,7 +195,7 @@ class TENAX:
         if check_gaps:
             # remove event that starts before dataset starts in regard of separation time
             if (consecutive_values[0][0] - dates[0]).item() < (
-                self.separation * 3.6e12
+                self.storm_separation_time * 3.6e12
             ):  # this numpy dt, so still in nanoseconds
                 consecutive_values.pop(0)
             else:
@@ -204,7 +203,7 @@ class TENAX:
 
             # remove event that ends before dataset ends in regard of separation time
             if (dates[-1] - consecutive_values[-1][-1]).item() < (
-                self.separation * 3.6e12
+                self.storm_separation_time * 3.6e12
             ):  # this numpy dt, so still in nanoseconds
                 consecutive_values.pop()
             else:
@@ -217,7 +216,8 @@ class TENAX:
             time_res = time_diffs[0]
             # Identify gaps (where the difference is greater than 1 hour)
             gap_indices_end = np.where(
-                time_diffs > np.timedelta64(int(self.separation * 3.6e12), "ns")
+                time_diffs
+                > np.timedelta64(int(self.storm_separation_time * 3.6e12), "ns")
             )[0]
             # extend by another index in gap cause we need to check if there is OE there too
             gap_indices_start = gap_indices_end + 1
@@ -226,7 +226,7 @@ class TENAX:
             for gap_idx in gap_indices_end:
                 end_date = dates[gap_idx]
                 start_date = end_date - np.timedelta64(
-                    int(self.separation * 3.6e12), "ns"
+                    int(self.storm_separation_time * 3.6e12), "ns"
                 )
                 # Creating an array from start_date to end_date in hourly intervals
                 temp_date_array = np.arange(start_date, end_date, time_res)
@@ -240,7 +240,7 @@ class TENAX:
             for gap_idx in gap_indices_start:
                 start_date = dates[gap_idx]
                 end_date = start_date + np.timedelta64(
-                    int(self.separation * 3.6e12), "ns"
+                    int(self.storm_separation_time * 3.6e12), "ns"
                 )
                 # Creating an array from start_date to end_date in hourly intervals
                 temp_date_array = np.arange(start_date, end_date, time_res)
@@ -308,7 +308,7 @@ class TENAX:
                 True
                 if (ev[-1] - ev[0]).astype("timedelta64[m]")
                 + np.timedelta64(int(self.time_resolution), "m")
-                >= pd.Timedelta(minutes=self.min_ev_dur)
+                >= pd.Timedelta(minutes=self.min_event_duration)
                 else False
                 for ev in list_ordinary
             ]
@@ -316,7 +316,7 @@ class TENAX:
                 (ev[-1], ev[0])
                 if (ev[-1] - ev[0]).astype("timedelta64[m]")
                 + np.timedelta64(int(self.time_resolution), "m")
-                >= pd.Timedelta(minutes=self.min_ev_dur)
+                >= pd.Timedelta(minutes=self.min_event_duration)
                 else (np.nan, np.nan)
                 for ev in list_ordinary
             ]
@@ -789,7 +789,7 @@ class TENAX:
         """
 
         perc_thres = self.left_censoring[1]
-        niter = self.niter_tnx
+        niter = self.niter_tenax
         RP = self.return_period
 
         blocks = np.unique(blocks_id)
@@ -1031,20 +1031,19 @@ def gen_norm_pdf(x: np.ndarray, mu: float, sigma: float, beta: float) -> np.ndar
     return coeff * np.exp(exponent)
 
 
-def gen_norm_loglik(x: np.ndarray, mu: float, sigma: float, beta: float) -> np.ndarray:
+def gen_norm_loglik(x: np.ndarray, par: list, beta: float) -> np.ndarray:
     """Function computing the Log-likelihood for the Generalized normal distribution.
 
     Args:
         x (np.ndarray): Data points.
-        mu (float): Location parameter.
-        sigma (float): Scale parameter.
+        par (list): List of parameters [mu, sigma].
         beta (float): Snape parameter.
 
     Returns:
         np.ndarray: Log-likelihood for the Generalized normal distribution.
     """
     # Compute the log-likelihood
-    pdf = gen_norm_pdf(x, mu, sigma, beta)
+    pdf = gen_norm_pdf(x, par[0], par[1], beta)
     n = len(pdf[pdf == 0])
     if n > 5:
         print(f"warning: {n} zero values")
@@ -1143,7 +1142,7 @@ def MC_tSMEV_cdf(
 
 def SMEV_Mc_inversion(
     wbl_phat: np.ndarray,
-    n: Union[int, float],
+    n: Union[int, float, pd.Series],
     target_return_periods: Union[list, np.ndarray],
     vguess: np.ndarray,
     method_root_scalar: Union[str, None],
@@ -1160,6 +1159,9 @@ def SMEV_Mc_inversion(
     Returns:
         np.ndarray: Quantiles corresponding to the target return periods.
     """
+    if isinstance(n, pd.Series):
+        n = float(n.values[0])
+
     pr = 1 - 1 / np.array(
         target_return_periods
     )  # Probabilities associated with target_return_periods

@@ -28,6 +28,7 @@ S = tenax.TENAX(
         200,
     ],  # for some reason it doesnt like calculating RP =<1
     durations=[10, 60, 180, 360, 720, 1440],
+    time_resolution=5,  # time resolution in minutes
     left_censoring=[0, 0.90],
     alpha=0.05,
 )
@@ -70,9 +71,7 @@ dict_ordinary, dict_AMS = S.get_ordinary_events_values(
     data=df_arr, dates=df_dates, arr_dates_oe=arr_dates
 )
 
-elapsed_time = time.time() - start_time
-# Print the elapsed time
-print(f"Elapsed time get OE: {elapsed_time:.4f} seconds")
+print(f"Elapsed time get OE: {time.time() - start_time:.4f} seconds")
 
 # load temperature data
 file_path_temperature = f"{RES_DIR}/temp_data_Aadorf.parquet"
@@ -91,10 +90,7 @@ dict_ordinary, _, n_ordinary_per_year = S.associate_vars(
     dict_ordinary, df_arr_t_data, df_dates_t_data
 )
 
-elapsed_time = time.time() - start_time
-# Print the elapsed time
-print(f"Elapsed time : {elapsed_time:.4f} seconds")
-
+print(f"Elapsed time : {time.time() - start_time:.4f} seconds")
 
 start_time = time.time()
 # Your data (P, T arrays) and threshold thr=3.8
@@ -122,10 +118,8 @@ n = n_ordinary_per_year.sum() / len(n_ordinary_per_year)
 
 
 RL, _, P_check = S.model_inversion(F_phat, g_phat, n, Ts)
-print(RL)
-elapsed_time = time.time() - start_time
-# Print the elapsed time
-print(f"Elapsed time TENAX : {elapsed_time:.4f} seconds")
+# print(RL)
+print(f"Elapsed time TENAX : {time.time() - start_time:.4f} seconds")
 
 
 start_time = time.time()
@@ -137,9 +131,7 @@ start_time = time.time()
 F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(
     P, T, blocks_id, Ts
 )
-
-elapsed_time = time.time() - start_time
-print(f"Time to do TENAX uncertainty: {elapsed_time:.4f} seconds")
+print(f"Time to do TENAX uncertainty: {time.time() - start_time:.4f} seconds")
 
 # SMEV and its uncertainty
 start_time = time.time()
@@ -162,10 +154,7 @@ smev_RL = S_SMEV.smev_return_values(
 )
 
 smev_RL_unc = S_SMEV.SMEV_bootstrap_uncertainty(P, blocks_id, S.niter_smev, n.item())
-
-
-elapsed_time = time.time() - start_time
-print(f"Time to do SMEV and uncertainty: {elapsed_time:.4f} seconds")
+print(f"Time to do SMEV and uncertainty: {time.time() - start_time:.4f} seconds")
 
 
 # PLOTTING THE GRAPHS
@@ -201,9 +190,7 @@ plt.show()
 iTs = np.arange(-2.5, 37.5, 1.5)  # idk why we need a different T range here
 S.n_monte_carlo = np.size(P) * S.niter_smev
 _, T_mc, P_mc = S.model_inversion(F_phat, g_phat, n, Ts, gen_P_mc=True, gen_RL=False)
-elapsed_time = time.time() - start_time
-# Print the elapsed time
-print(f"Elapsed time model_inversion all: {elapsed_time:.4f} seconds")
+print(f"Elapsed time model_inversion all: {time.time() - start_time:.4f} seconds")
 scaling_rate_W, scaling_rate_q = tenax.TNX_FIG_scaling(
     P, T, P_mc, T_mc, F_phat, S.niter_smev, eT, iTs
 )
