@@ -1,9 +1,3 @@
-"""
-Copied on 6/11/2024 4:22PM
-source code:
-https://github.com/luigicesarini/pysmev/blob/main/src/pysmev/smev_class.py
-"""
-
 import math
 import numpy as np
 import pandas as pd
@@ -352,7 +346,20 @@ class SMEV:
 
         return total_prec, mean_prec, sd_prec, count_prec
 
-    def SMEV_bootstrap_uncertainty(self, P, blocks_id, niter, n):
+    def SMEV_bootstrap_uncertainty(
+        self, P: np.ndarray, blocks_id: np.ndarray, niter: int, n: float
+    ):
+        """Function that bootstraps uncertainty of SMEV return values.
+
+        Args:
+            P (np.ndarray): Array of precipitation data.
+            blocks_id (np.ndarray): Array of block identifiers (e.g., years).
+            niter (int): Number of bootstrap iterations.
+            n (float): SMEV parameter `n`.
+
+        Returns:
+            np.ndarray: Array with bootstrapped return value uncertainty.
+        """
         RP = self.return_period
 
         blocks = np.unique(blocks_id)
