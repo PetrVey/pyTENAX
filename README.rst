@@ -21,34 +21,33 @@ https://github.com/luigicesarini/pysmev
 
 Installation
 ------------
-Install using:
-
-Python version required: <3.12
-
-Module required can be found in either requirements.txt or env.yml
-
 For the moment the package is not available on pypi, so you need to install it from the source code.
-To do so, clone the repository and run the following command in the root folder of the repository:
+To do so, clone the repository and run the following command in the root folder of the repository.
+  
+With Conda 
 
 .. code-block:: bash
-    
-   pip install .
+
+    # create pytenax environment
+    conda env create -f env.yml
+    # activate pytenax environment
+    conda activate pytenax_env
+    # install pytenax in editable mode
+    python -m pip install -e .
 
 Usage
 -----
-!! TO COMPLETE !!
+.. !! TO COMPLETE !!
 
-The class contains the following methods:
+.. The class contains the following methods:
 
-!! TO COMPLETE !!
+.. !! TO COMPLETE !!
 
-The following is an example of how to use the class:
+.. The following is an example of how to use the class:
 
-.. code-block:: python
+.. .. code-block:: python
 
-    #TODO
-
-
+..     #TODO
 
 For a complete example of how to use the class, run the file `test_tenax.py` in the `src` folder with the following command:
 
@@ -56,17 +55,8 @@ For a complete example of how to use the class, run the file `test_tenax.py` in 
 
     python src/test_smev.py
 
-
-
 Development
 -----------
-Please work on a feature branch and create a pull request to the development 
-branch. If necessary to merge manually do so without fast forward:
-
-.. code-block:: bash
-
-    git merge --no-ff myfeature
-
 To build a development environment run:
 
 .. code-block:: bash
@@ -74,20 +64,31 @@ To build a development environment run:
     python3 -m venv env 
     source env/bin/activate 
     pip install -e .
-    pip install -r requirements.txt
 
 With Conda 
 
 .. code-block:: bash
 
     conda env create -f env.yml
-    conda activate env
-    pip install -e .
+    conda activate pytenax_env
+    python -m pip install -e .
 
+.. Rebuild is done by setup.py inside of new branch.
+.. .. code-block:: python
+..     setup.py sdist bdist_wheel
 
-Rebuild is done by setup.py inside of new branch.
-.. code-block::
-    setup.py sdist bdist_wheel
+Please work on a feature branch and create a pull request to the source branch.
+To ensure formatting consistency, please install the pre-commit hooks by running:
+
+.. code-block:: bash
+
+    pre-commit install
+
+If necessary to merge manually do so without fast forward:
+
+.. code-block:: bash
+
+    git merge --no-ff myfeature
 
 Contributions
 -------------
