@@ -1014,29 +1014,35 @@ def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
     return loglik
 
 
-def gen_norm_pdf(x, mu, sigma, beta):
-    """
-    Generalized normal distribution PDF.
-    x: data points
-    mu: location parameter (mean)
-    sigma: scale parameter (related to standard deviation)
-    beta: shape parameter (determines the shape of the distribution)
+def gen_norm_pdf(x: np.ndarray, mu: float, sigma: float, beta: float) -> np.ndarray:
+    """Function computing the Generalized normal distribution PDF.
+
+    Args:
+        x (np.ndarray): Data points.
+        mu (float): Location parameter.
+        sigma (float): Scale parameter.
+        beta (float): Snape parameter.
+
+    Returns:
+        np.ndarray: Generalized normal distribution PDF
     """
     coeff = beta / (2 * sigma * gamma(1 / beta))
     exponent = -((np.abs(x - mu) / sigma) ** beta)
     return coeff * np.exp(exponent)
 
 
-def gen_norm_loglik(x, par, beta):
-    """
-    Log-likelihood for the generalized normal distribution.
-    x: data points
-    par: list or array containing [mu, sigma]
-    beta: shape parameter
-    """
-    mu = par[0]
-    sigma = par[1]
+def gen_norm_loglik(x: np.ndarray, mu: float, sigma: float, beta: float) -> np.ndarray:
+    """Function computing the Log-likelihood for the Generalized normal distribution.
 
+    Args:
+        x (np.ndarray): Data points.
+        mu (float): Location parameter.
+        sigma (float): Scale parameter.
+        beta (float): Snape parameter.
+
+    Returns:
+        np.ndarray: Log-likelihood for the Generalized normal distribution.
+    """
     # Compute the log-likelihood
     pdf = gen_norm_pdf(x, mu, sigma, beta)
     n = len(pdf[pdf == 0])
@@ -1114,17 +1120,19 @@ def randdf(size, df, flag):
     return result.reshape((n, m))
 
 
-def MC_tSMEV_cdf(y, wbl_phat, n):
+def MC_tSMEV_cdf(
+    y: Union[float, np.ndarray], wbl_phat: np.ndarray, n: int
+) -> Tuple[float, np.ndarray]:
     """
     Calculate the cumulative distribution function (CDF) based on the given Weibull parameters.
 
-    Parameters:
-    y (float or array-like): Value(s) at which to evaluate the CDF.
-    wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
-    n (int): Power to raise the final probability to.
+    Args:
+        y (Union[float, np.ndarray]): Value(s) at which to evaluate the CDF.
+        wbl_phat (np.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
+        n (int): Power to raise the final probability to.
 
     Returns:
-    float or numpy.ndarray: Calculated CDF value(s).
+        Tuple[float, np.ndarray]: Calculated CDF value(s).
     """
     p = 0
     for i in range(wbl_phat.shape[0]):
@@ -1133,26 +1141,25 @@ def MC_tSMEV_cdf(y, wbl_phat, n):
     return p
 
 
-def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess, method_root_scalar):
+def SMEV_Mc_inversion(
+    wbl_phat: np.ndarray,
+    n: Union[int, float],
+    target_return_periods: Union[list, np.ndarray],
+    vguess: np.ndarray,
+    method_root_scalar: Union[str, None],
+) -> np.ndarray:
     """
     Invert to find quantiles corresponding to the target return periods.
 
-    Parameters:
-    wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
-    n (int): Power to raise the final probability to.
-    target_return_periods (list or array-like): Desired target return periods.
-    vguess (numpy.ndarray): Initial guesses for inversion.
+    Args:
+        wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
+        n (int): Power to raise the final probability to.
+        target_return_periods (list or array-like): Desired target return periods.
+        vguess (numpy.ndarray): Initial guesses for inversion.
 
     Returns:
-    numpy.ndarray: Quantiles corresponding to the target return periods.
+        np.ndarray: Quantiles corresponding to the target return periods.
     """
-    if not isinstance(
-        n, float
-    ):  # if n is numpy or panda series, this should give u just float
-        n = float(n.values[0])
-    else:
-        pass
-
     pr = 1 - 1 / np.array(
         target_return_periods
     )  # Probabilities associated with target_return_periods
