@@ -12,7 +12,7 @@ class SMEV:
         separation: int,
         return_period: list[Union[int, float]],
         durations: list[int],
-        time_resolution,
+        time_resolution: int,
         min_duration: Union[None, int] = None,
         left_censoring: Union[None, list] = None,
     ):
@@ -23,7 +23,7 @@ class SMEV:
             separation (int): Separation time between independent storms [min]
             return_period (list[Union[int, float]]): List of return periods of interest [years].
             durations (list[Union[int]]): List of durations of interest [min].
-            time_resolution (_type_): _description_
+            time_resolution (int): Temporal resolution of the precipitation data [min].
             min_duration (Union[None, int], optional): Minimum duration of storm [min]. Defaults to None.\
                 If None, it is set to 0.
             left_censoring (Union[None, list], optional): 2-elements list with the limits in probability \

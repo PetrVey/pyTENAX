@@ -1,196 +1,105 @@
-"""
-Created on Thu Oct 17 14:53:36 2024
-
-@author: Petr
-"""
-
 import pandas as pd
 import numpy as np
-from scipy.stats import weibull_min
-from scipy.optimize import minimize
-from scipy.stats import chi2
 from scipy.special import gamma
-from scipy.stats import norm, skewnorm
-from scipy.optimize import root_scalar
+from scipy.stats import weibull_min, norm, skewnorm, chi2
+from scipy.optimize import root_scalar, minimize
 import time
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
-from packaging.version import parse
 from scipy.optimize import curve_fit
 
-from typing import Union
+from typing import Union, Tuple
 
 
 class TENAX:
-    """
-    A class used to represent the TENAX model
-
-    TEmperaturedependent Non-Asymptotic statistical model for eXtreme
-    return levels (TENAX), is based on a parsimonious nonstationary and
-    non-asymptotic theoretical framework that incorporates temperature as a covariate
-    in a physically consistent manner.
-
-    Attributes:
-    -----------
-    return_period : list
-        Return periods [y]
-    durations : list
-        Duration of interest [min]; same as precipitation input in this example.
-    beta : float
-        Shape parameter of the Generalized Normal for g(T)
-    temp_time_hour : int (negative)
-        Time window to compute T [h]
-    alpha : float
-        Significance level for the dependence of the shape on T [-]
-        alpha=0 --> dependence of shape on T is always allowed
-        alpha=1 --> dependence of shape on T is never allowed
-        alpha   --> dependence of shape on T depends on stat. significance at the alpha-level
-    n_monte_carlo : int
-        Number of elements in the MC samples [-]
-    tolerance : float
-        Max fraction of missing data in one year [-]
-    min_ev_dur : int
-        Minimum event duration [min]
-    separation : int
-        Separation time between independent storms [min]
-    left_censoring : list
-        Left-censoring threshold [percentile]; see Marra et al. 2023 (https://doi.org/10.1016/j.advwatres.2023.104388)
-    niter_smev : int
-        Number of iterations for uncertainty for the SMEV model [-]
-    niter_tnx :int
-        Number of iterations for uncertainty for the TENAX model [-]; in the paper we used 1e3
-    temp_res_monte_carlo  : float
-        Resolution in T for the MC samples [-]
-    temp_delta : int
-        Range in T of MC samples [-]; explores temperatures up to Tdelt degrees higher and lower of the observed ones
-    init_param_guess : list
-        Initial values of Weibull parameters for fminsearch [-]
-
-    Methods:
-    --------
-    __init__(self, return_period, durations, beta=4, temp_time_hour, alpha,
-             n_monte_carlo, tolerance, min_ev_dur, separation, left_censoring,
-             niter_smev, niter_tnx,  temp_res_monte_carlo , temp_delta, init_param_guess):
-        Initializes the TENAX class with the provided parameters.
-
-
-    """
-
     def __init__(
         self,
         return_period: list[Union[int, float]],
         durations: list[int],
-        beta=4,
-        temp_time_hour=-24,
+        time_resolution: int,
+        beta: Union[float, int] = 4,
+        temp_time_hour: int = 24,
         alpha=0.05,
         n_monte_carlo=int(2e4),
         tolerance=0.1,
-        min_ev_dur=30,
-        separation=24,
+        min_event_duration=30,
+        storm_separation_time=24,
         left_censoring: list = [0, 1],
         niter_smev=100,  # why is this here?
-        niter_tnx=100,
+        niter_tenax=100,
         temp_res_monte_carlo=0.001,
         temp_delta=10,
         init_param_guess=[0.7, 0, 2, 0],
-        min_rain=0,
-    ):
+        min_rain: Union[float, int] = 0,
+    ) -> None:
+        """Initialize the TENAX model with the specified parameters.
+
+        The TEmperaturedependent Non-Asymptotic statistical model for eXtreme
+        return levels (TENAX), is based on a parsimonious nonstationary and
+        non-asymptotic theoretical framework that incorporates temperature as a covariate
+        in a physically consistent manner.
+
+        Args:
+            return_period (list[Union[int, float]]): Return periods [years].
+            durations (list[int]): Duration of interest [min].
+            beta (Union[float, int], optional): Shape parameter of the Generalized Normal for g(T). Defaults to 4.
+            temp_time_hour (int, optional): Time window to compute T [h]. Will be converted to negative if needed. Defaults to 24.
+            alpha (float, optional): Unitless significance level for the dependence of the shape on T. Defaults to 0.05.
+                - alpha = 0 --> dependence of shape on T is always allowed.
+                - alpha = 1 --> dependence of shape on T is never allowed.
+                - 0 < alpha < 1 --> dependence of shape on T depends on statistical significance at the alpha-level.
+            n_monte_carlo (int, optional): Number of elements in the MC samples. Defaults to int(2e4).
+            tolerance (float, optional): Maximum allowed fraction of missing data in one year. If exceeded, year will be disregarded from samples. Defaults to 0.1.
+            min_event_duration (int, optional): Minimum event duration [min]. Defaults to 30.
+            storm_separation_time (int, optional): Separation time between independent storms [hours]. Defaults to 24.
+            left_censoring (list, optional): 2-elements list with the limits in probability of the data to be used for the parameters estimation. Defaults to [0, 1].
+            niter_smev (int, optional): Number of iterations for uncertainty for the SMEV model. Defaults to 100.
+            niter_tenax (int, optional): Number of iterations for uncertainty for the TENAX model. Defaults to 100.
+            temp_res_monte_carlo (float, optional): Resolution in T for the MC samples. Defaults to 0.001.
+            temp_delta (int, optional): Range in T of MC samples. Explores temperatures up to Tdelt degrees higher and lower of the observed ones. Defaults to 10.
+            init_param_guess (list, optional): Initial values of Weibull parameters for `fminsearch`. Defaults to [0.7, 0, 2, 0].
+            min_rain (Union[float, int], optional): Minimum rainfall value. Defaults to 0.
         """
-        Initialize the TENAX model with the specified parameters.
-
-        Parameters:
-        -----------
-        return_period : list
-            Return periods [years]
-        durations : list
-            Duration of interest [min]; same as precipitation input in this example.
-        beta : float
-            Shape parameter of the Generalized Normal for g(T)
-        temp_time_hour : int (negative)
-            Time window to compute T [h]
-        alpha : float
-            Significance level for the dependence of the shape on T [-]
-            alpha=0 --> dependence of shape on T is always allowed
-            alpha=1 --> dependence of shape on T is never allowed
-            alpha   --> dependence of shape on T depends on stat. significance at the alpha-level
-        n_monte_carlo : int
-            Number of elements in the MC samples [-]
-        tolerance : float
-            Max fraction of missing data in one year [-]
-        min_ev_dur : int
-            Minimum event duration [min]
-        separation : int
-            Separation time between idependent storms [hours]
-        left_censoring : list
-            Left-censoring threshold [percentile]; see Marra et al. 2023 (https://doi.org/10.1016/j.advwatres.2023.104388)
-        niter_smev : int
-            Number of iterations for uncertainty for the SMEV model [-]
-        niter_tnx :int
-            Number of iterations for uncertainty for the TENAX model [-]; in the paper we used 1e3
-        temp_res_monte_carlo  : float
-            Resolution in T for the MC samples [-]
-        temp_delta : int
-            Range in T of MC samples [-]; explores temperatures up to Tdelt degrees higher and lower of the observed ones
-        init_param_guess : list
-            Initial values of Weibull parameters for fminsearch [-]
-        min_rain : float
-            minimum rainfall value,
-            reason --> Climate models has issue with too small float values (drizzles, eg. 0.0099mm/h)
-                   --> Another reason is that the that rain gauge tipping bucket has min value
-
-        """
-
         self.return_period = return_period
         self.durations = durations
+        self.time_resolution = time_resolution
         self.beta = beta
-        self.temp_time_hour = (
-            temp_time_hour if temp_time_hour < 0 else -temp_time_hour
-        )  # be sure this is negative
+        self.temp_time_hour = temp_time_hour if temp_time_hour < 0 else -temp_time_hour
         self.alpha = alpha
         self.n_monte_carlo = n_monte_carlo
         self.tolerance = tolerance
-        self.min_ev_dur = min_ev_dur
-        self.separation = separation
+        self.min_event_duration = min_event_duration
+        self.storm_separation_time = storm_separation_time
         self.left_censoring = left_censoring
         self.niter_smev = niter_smev
-        self.niter_tnx = niter_tnx
+        self.niter_tenax = niter_tenax
         self.temp_res_monte_carlo = temp_res_monte_carlo
         self.temp_delta = temp_delta
         self.init_param_guess = init_param_guess
         self.min_rain = min_rain
 
+        self.__incomplete_years_removed__ = False
+
     def remove_incomplete_years(
         self, data_pr: pd.DataFrame, name_col="value", nan_to_zero=True
     ) -> pd.DataFrame:
-        """
-        Function that delete incomplete years in precipitation data.
+        """Function that delete incomplete years in precipitation data.
+        An incomplete year is defined as a year where observations are missing above a given threshold.
 
-        Parameters
-        ----------
-        data_pr : pd dataframe
-            dataframe containing the hourly values of precipitation
-        name_col : string
-            name of column where variable values are stored
-        nan_to_zero: bool
-            push nan to zero
+        Args:
+            data_pr (pd.DataFrame): Dataframe containing (hourly) precipitation values.
+            name_col (str, optional): Column name in `data_pr` with precipitation values. Defaults to "value".
+            nan_to_zero (bool, optional): Set `nan` to zero. Defaults to True.
 
-        Returns
-        -------
-        data_cleanded: pd dataframe
-           cleaned dataset.
-
+        Returns:
+            pd.DataFrame: Dataframe containing (hourly) precipitation values with incomplete years removed.
         """
         # Step 1: get resolution of dataset (MUST BE SAME in whole dataset!!!)
         time_res = (data_pr.index[-1] - data_pr.index[-2]).total_seconds() / 60
         # Step 2: Resample by year and count total and NaN values
-        if parse(pd.__version__) > parse("2.2"):
-            yearly_valid = data_pr.resample("YE").apply(
-                lambda x: x.notna().sum()
-            )  # Count not NaNs per year
-        else:
-            yearly_valid = data_pr.resample("Y").apply(
-                lambda x: x.notna().sum()
-            )  # Count not NaNs per year
+        yearly_valid = data_pr.resample("YE").apply(
+            lambda x: x.notna().sum()
+        )  # Count not NaNs per year
         # Step 3: Estimate expected lenght of yearly timeseries
         expected = pd.DataFrame(index=yearly_valid.index)
         expected["Total"] = 1440 / time_res * 365
@@ -205,6 +114,9 @@ class TENAX:
             data_cleanded.loc[:, name_col] = data_cleanded[name_col].fillna(0)
 
         self.time_resolution = time_res
+
+        self.__incomplete_years_removed__ = True
+
         return data_cleanded
 
     def get_ordinary_events(
@@ -244,7 +156,9 @@ class TENAX:
                 if not temp:
                     temp.append(index)
                 else:
-                    if index - temp[-1] > pd.Timedelta(hours=self.separation):
+                    if index - temp[-1] > pd.Timedelta(
+                        hours=self.storm_separation_time
+                    ):
                         if len(temp) >= 1:
                             consecutive_values.append(temp)
                         temp = []
@@ -269,7 +183,7 @@ class TENAX:
                     # numpy delta is in nanoseconds, it  might be better to do dates[index] - dates[temp[-1]]).item() / np.timedelta64(1, 'm')
                     if (
                         (dates[index] - dates[temp[-1]]).item()
-                        > (self.separation * 3.6e12)
+                        > (self.storm_separation_time * 3.6e12)
                     ):  # Assuming 24 is the number of hours, nanoseconds * 3.6e+12 = hours
                         if len(temp) >= 1:
                             consecutive_values.append(dates[temp])
@@ -281,7 +195,7 @@ class TENAX:
         if check_gaps:
             # remove event that starts before dataset starts in regard of separation time
             if (consecutive_values[0][0] - dates[0]).item() < (
-                self.separation * 3.6e12
+                self.storm_separation_time * 3.6e12
             ):  # this numpy dt, so still in nanoseconds
                 consecutive_values.pop(0)
             else:
@@ -289,7 +203,7 @@ class TENAX:
 
             # remove event that ends before dataset ends in regard of separation time
             if (dates[-1] - consecutive_values[-1][-1]).item() < (
-                self.separation * 3.6e12
+                self.storm_separation_time * 3.6e12
             ):  # this numpy dt, so still in nanoseconds
                 consecutive_values.pop()
             else:
@@ -302,7 +216,8 @@ class TENAX:
             time_res = time_diffs[0]
             # Identify gaps (where the difference is greater than 1 hour)
             gap_indices_end = np.where(
-                time_diffs > np.timedelta64(int(self.separation * 3.6e12), "ns")
+                time_diffs
+                > np.timedelta64(int(self.storm_separation_time * 3.6e12), "ns")
             )[0]
             # extend by another index in gap cause we need to check if there is OE there too
             gap_indices_start = gap_indices_end + 1
@@ -311,7 +226,7 @@ class TENAX:
             for gap_idx in gap_indices_end:
                 end_date = dates[gap_idx]
                 start_date = end_date - np.timedelta64(
-                    int(self.separation * 3.6e12), "ns"
+                    int(self.storm_separation_time * 3.6e12), "ns"
                 )
                 # Creating an array from start_date to end_date in hourly intervals
                 temp_date_array = np.arange(start_date, end_date, time_res)
@@ -325,7 +240,7 @@ class TENAX:
             for gap_idx in gap_indices_start:
                 start_date = dates[gap_idx]
                 end_date = start_date + np.timedelta64(
-                    int(self.separation * 3.6e12), "ns"
+                    int(self.storm_separation_time * 3.6e12), "ns"
                 )
                 # Creating an array from start_date to end_date in hourly intervals
                 temp_date_array = np.arange(start_date, end_date, time_res)
@@ -341,98 +256,82 @@ class TENAX:
 
         return consecutive_values
 
-    def remove_short(self, list_ordinary: list, time_resolution=None):
+    def remove_short(
+        self, list_ordinary: list
+    ) -> Tuple[np.ndarray, np.ndarray, pd.Series]:
+        """Function that removes ordinary events too short.
+
+        Args:
+            list_ordinary (list): list of indices of ordinary events as returned by `get_ordinary_events()`.
+
+        Returns:
+            np.ndarray: Array with indices of events that are not too short.
+            np.ndarray: Array with tuple consisting of start and end dates of events that are not too short.
+            pd.Series: Series with the number of ordinary events per year.
         """
-
-        Function that removes ordinary events too short.
-
-        Parameters
-        ----------
-        - list_ordinary list: list of indices of ordinary events as returned by `get_ordinary_events`.
-        - time_resolution: Used to calculate lenght of storm
-        Returns
-        -------
-        - arr_vals : boolean array,
-        - arr_dates : dates of OE in TO, FROM format
-        - n_ordinary_per_year: count of OE in each years
-
-        Examples
-        --------
-        """
-        try:
-            if time_resolution is None:
-                self.time_resolution
-            else:
-                self.time_resolution = time_resolution
-
-            if isinstance(list_ordinary[0][0], pd.Timestamp):
-                # event is multiplied by its lenght to get duration and compared with min_duration setup
-                ll_short = [
-                    True
-                    if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
-                    >= pd.Timedelta(minutes=self.min_ev_dur)
-                    else False
-                    for ev in list_ordinary
-                ]
-                ll_dates = [
-                    (
-                        ev[-1].strftime("%Y-%m-%d %H:%M:%S"),
-                        ev[0].strftime("%Y-%m-%d %H:%M:%S"),
-                    )
-                    if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
-                    >= pd.Timedelta(minutes=self.min_ev_dur)
-                    else (np.nan, np.nan)
-                    for ev in list_ordinary
-                ]
-                arr_vals = np.array(ll_short)[ll_short]
-                arr_dates = np.array(ll_dates)[ll_short]
-
-                filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
-                list_year = pd.DataFrame(
-                    [filtered_list[_][0].year for _ in range(len(filtered_list))],
-                    columns=["year"],
-                )
-                n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
-                # n_ordinary=n_ordinary_per_year.mean().values.item()
-            elif isinstance(list_ordinary[0][0], np.datetime64):
-                ll_short = [
-                    True
-                    if (ev[-1] - ev[0]).astype("timedelta64[m]")
-                    + np.timedelta64(int(self.time_resolution), "m")
-                    >= pd.Timedelta(minutes=self.min_ev_dur)
-                    else False
-                    for ev in list_ordinary
-                ]
-                ll_dates = [
-                    (ev[-1], ev[0])
-                    if (ev[-1] - ev[0]).astype("timedelta64[m]")
-                    + np.timedelta64(int(self.time_resolution), "m")
-                    >= pd.Timedelta(minutes=self.min_ev_dur)
-                    else (np.nan, np.nan)
-                    for ev in list_ordinary
-                ]
-                arr_vals = np.array(ll_short)[ll_short]
-                arr_dates = np.array(ll_dates)[ll_short]
-
-                filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
-                list_year = pd.DataFrame(
-                    [
-                        filtered_list[_][0].astype("datetime64[Y]").item().year
-                        for _ in range(len(filtered_list))
-                    ],
-                    columns=["year"],
-                )
-                n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
-                # n_ordinary=n_ordinary_per_year.mean().values.item()
-
-        except ValueError:
-            print("Warning !!!! Warning !!!! Warning !!!! Warning !!!! Warning !!!!")
-            print("Warning !!!! Warning !!!! Warning !!!! Warning !!!! Warning !!!!")
-
-            print(
-                "You did not run 'remove_incomplete_years' before OR time_resolution not provided"
+        if not self.__incomplete_years_removed__:
+            raise ValueError(
+                "You must run 'remove_incomplete_years' before running this function."
             )
-            arr_vals, arr_dates, n_ordinary_per_year = np.nan, np.nan, np.nan
+
+        if isinstance(list_ordinary[0][0], pd.Timestamp):
+            # event is multiplied by its lenght to get duration and compared with min_duration setup
+            ll_short = [
+                True
+                if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
+                >= pd.Timedelta(minutes=self.min_event_duration)
+                else False
+                for ev in list_ordinary
+            ]
+            ll_dates = [
+                (
+                    ev[-1].strftime("%Y-%m-%d %H:%M:%S"),
+                    ev[0].strftime("%Y-%m-%d %H:%M:%S"),
+                )
+                if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
+                >= pd.Timedelta(minutes=self.min_event_duration)
+                else (np.nan, np.nan)
+                for ev in list_ordinary
+            ]
+            arr_vals = np.array(ll_short)[ll_short]
+            arr_dates = np.array(ll_dates)[ll_short]
+
+            filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
+            list_year = pd.DataFrame(
+                [filtered_list[_][0].year for _ in range(len(filtered_list))],
+                columns=["year"],
+            )
+            n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
+
+        elif isinstance(list_ordinary[0][0], np.datetime64):
+            ll_short = [
+                True
+                if (ev[-1] - ev[0]).astype("timedelta64[m]")
+                + np.timedelta64(int(self.time_resolution), "m")
+                >= pd.Timedelta(minutes=self.min_event_duration)
+                else False
+                for ev in list_ordinary
+            ]
+            ll_dates = [
+                (ev[-1], ev[0])
+                if (ev[-1] - ev[0]).astype("timedelta64[m]")
+                + np.timedelta64(int(self.time_resolution), "m")
+                >= pd.Timedelta(minutes=self.min_event_duration)
+                else (np.nan, np.nan)
+                for ev in list_ordinary
+            ]
+            arr_vals = np.array(ll_short)[ll_short]
+            arr_dates = np.array(ll_dates)[ll_short]
+
+            filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
+            list_year = pd.DataFrame(
+                [
+                    filtered_list[_][0].astype("datetime64[Y]").item().year
+                    for _ in range(len(filtered_list))
+                ],
+                columns=["year"],
+            )
+            n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
 
         return arr_vals, arr_dates, n_ordinary_per_year
 
@@ -566,7 +465,7 @@ class TENAX:
                 direction="nearest",
             )
 
-            for idx, row in merged.iterrows():
+            for _, row in merged.iterrows():
                 end_time = row["time_index"]
 
                 # Find the index of the closest time directly using `np.searchsorted`
@@ -890,7 +789,7 @@ class TENAX:
         """
 
         perc_thres = self.left_censoring[1]
-        niter = self.niter_tnx
+        niter = self.niter_tenax
         RP = self.return_period
 
         blocks = np.unique(blocks_id)
@@ -1115,31 +1014,36 @@ def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
     return loglik
 
 
-def gen_norm_pdf(x, mu, sigma, beta):
-    """
-    Generalized normal distribution PDF.
-    x: data points
-    mu: location parameter (mean)
-    sigma: scale parameter (related to standard deviation)
-    beta: shape parameter (determines the shape of the distribution)
+def gen_norm_pdf(x: np.ndarray, mu: float, sigma: float, beta: float) -> np.ndarray:
+    """Function computing the Generalized normal distribution PDF.
+
+    Args:
+        x (np.ndarray): Data points.
+        mu (float): Location parameter.
+        sigma (float): Scale parameter.
+        beta (float): Snape parameter.
+
+    Returns:
+        np.ndarray: Generalized normal distribution PDF
     """
     coeff = beta / (2 * sigma * gamma(1 / beta))
     exponent = -((np.abs(x - mu) / sigma) ** beta)
     return coeff * np.exp(exponent)
 
 
-def gen_norm_loglik(x, par, beta):
-    """
-    Log-likelihood for the generalized normal distribution.
-    x: data points
-    par: list or array containing [mu, sigma]
-    beta: shape parameter
-    """
-    mu = par[0]
-    sigma = par[1]
+def gen_norm_loglik(x: np.ndarray, par: list, beta: float) -> np.ndarray:
+    """Function computing the Log-likelihood for the Generalized normal distribution.
 
+    Args:
+        x (np.ndarray): Data points.
+        par (list): List of parameters [mu, sigma].
+        beta (float): Snape parameter.
+
+    Returns:
+        np.ndarray: Log-likelihood for the Generalized normal distribution.
+    """
     # Compute the log-likelihood
-    pdf = gen_norm_pdf(x, mu, sigma, beta)
+    pdf = gen_norm_pdf(x, par[0], par[1], beta)
     n = len(pdf[pdf == 0])
     if n > 5:
         print(f"warning: {n} zero values")
@@ -1215,17 +1119,19 @@ def randdf(size, df, flag):
     return result.reshape((n, m))
 
 
-def MC_tSMEV_cdf(y, wbl_phat, n):
+def MC_tSMEV_cdf(
+    y: Union[float, np.ndarray], wbl_phat: np.ndarray, n: int
+) -> Tuple[float, np.ndarray]:
     """
     Calculate the cumulative distribution function (CDF) based on the given Weibull parameters.
 
-    Parameters:
-    y (float or array-like): Value(s) at which to evaluate the CDF.
-    wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
-    n (int): Power to raise the final probability to.
+    Args:
+        y (Union[float, np.ndarray]): Value(s) at which to evaluate the CDF.
+        wbl_phat (np.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
+        n (int): Power to raise the final probability to.
 
     Returns:
-    float or numpy.ndarray: Calculated CDF value(s).
+        Tuple[float, np.ndarray]: Calculated CDF value(s).
     """
     p = 0
     for i in range(wbl_phat.shape[0]):
@@ -1234,25 +1140,27 @@ def MC_tSMEV_cdf(y, wbl_phat, n):
     return p
 
 
-def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess, method_root_scalar):
+def SMEV_Mc_inversion(
+    wbl_phat: np.ndarray,
+    n: Union[int, float, pd.Series],
+    target_return_periods: Union[list, np.ndarray],
+    vguess: np.ndarray,
+    method_root_scalar: Union[str, None],
+) -> np.ndarray:
     """
     Invert to find quantiles corresponding to the target return periods.
 
-    Parameters:
-    wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
-    n (int): Power to raise the final probability to.
-    target_return_periods (list or array-like): Desired target return periods.
-    vguess (numpy.ndarray): Initial guesses for inversion.
+    Args:
+        wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
+        n (int): Power to raise the final probability to.
+        target_return_periods (list or array-like): Desired target return periods.
+        vguess (numpy.ndarray): Initial guesses for inversion.
 
     Returns:
-    numpy.ndarray: Quantiles corresponding to the target return periods.
+        np.ndarray: Quantiles corresponding to the target return periods.
     """
-    if not isinstance(
-        n, float
-    ):  # if n is numpy or panda series, this should give u just float
+    if isinstance(n, pd.Series):
         n = float(n.values[0])
-    else:
-        pass
 
     pr = 1 - 1 / np.array(
         target_return_periods
@@ -1434,163 +1342,6 @@ def TNX_obs_scaling_rate(P, T, qs, niter):
     return qhat, qhat_unc
 
 
-def TNX_FIG_magn_model(
-    P,
-    T,
-    F_phat,
-    thr,
-    eT,
-    qs,
-    obscol="r",
-    valcol="b",
-    xlimits=[-12, 30],
-    ylimits=[0.1, 1000],
-):
-    """
-    Plots figure 2a. the observed T-P pairs and the W model percentiles.
-
-    Parameters
-    ----------
-    P : numpy.ndarray
-        precipitation values
-    T : numpy.ndarray
-        temperature values
-    F_phat : numpy.ndarray
-        distribution values. F_phat = [kappa_0,b,lambda_0,a]..
-    thr : float
-        precipitation threshold for the left-censoring.
-    eT : numpy.ndarray
-        x values to plot W model.
-    qs : list
-        percentiles to calculate W.
-    obscol : string, optional
-        color code to plot observations. The default is 'r'.
-    valcol : string, optional
-        color code to plot model. The default is 'b'.
-    xlimits : list, optional
-        [min_x,max_x]. x limits to plot. The default is [-12,30].
-    ylimits : list, optional
-        [min_y,max_y]. y limits to plot. The default is [0.1,1000].
-
-    Returns
-    -------
-    None.
-
-    """
-    # TO DO: documentation, adjustable axes, line labels instead of legend, axis labels
-
-    percentile_lines = inverse_magnitude_model(F_phat, eT, qs)
-    plt.scatter(T, P, s=1, color=obscol, label="observations")
-    plt.plot(
-        eT,
-        [thr] * np.size(eT),
-        "--",
-        alpha=0.5,
-        color="k",
-        label="Left censoring threshold",
-    )  # plot threshold
-
-    # first one outside loop so can be in legend
-    n = 0
-    plt.plot(eT, percentile_lines[n], label="Magnitude model W(x,T)", color=valcol)
-    plt.text(
-        eT[-1], percentile_lines[n][-1], str(qs[n] * 100) + "th", ha="left", va="center"
-    )
-    n = 1
-    while n < np.size(qs):
-        plt.plot(eT, percentile_lines[n], color=valcol)  # ,label = str(qs[n]),
-        plt.text(
-            eT[-1],
-            percentile_lines[n][-1],
-            str(qs[n] * 100) + "th",
-            ha="left",
-            va="center",
-        )
-        n = n + 1
-
-    plt.legend()
-    plt.yscale("log")
-    plt.ylim(ylimits[0], ylimits[1])
-    plt.xlim(xlimits[0], xlimits[1])
-    plt.xlabel("T [°C]")
-
-
-def TNX_FIG_valid(
-    AMS,
-    RP,
-    RL,
-    smev_RL=[],
-    RL_unc=0,
-    smev_RL_unc=0,
-    TENAXcol="b",
-    obscol_shape="g+",
-    smev_colshape="--r",
-    TENAXlabel="The TENAX model",
-    obslabel="Observed annual maxima",
-    smevlabel="The SMEV model",
-    alpha=0.2,
-    xlimits=[1, 200],
-    ylimits=[0, 50],
-):  # figure 4
-    """
-    Plots figure 4.
-
-    Parameters
-    ----------
-    AMS : pandas.core.frame.DataFrame
-        Annual maxima.
-    RP : list
-        return periods to plot.
-    RL : numpy.ndarray
-        return levels calculated by TENAX.
-    TENAXcol : string, optional
-        color for tenax line plot. The default is 'b'.
-    obscol_shape : string, optional
-        color and shape of annual maxima observations. The default is 'g+'.
-    TENAXlabel : string, optional
-        label for tenax in legend. The default is 'The TENAX model'.
-    obslabel : string, optional
-        label for annual maxima observations in legend . The default is 'Observed annual maxima'.
-
-    xlimits : list, optional
-        [min_x,max_x]. x limits to plot. The default is [1,200].
-    ylimits : list, optional
-        [min_y,max_y]. y limits to plot. The default is [0,50].
-
-    Returns
-    -------
-    None.
-
-    """
-
-    AMS_sort = AMS.sort_values(by=["AMS"])["AMS"]
-    plot_pos = np.arange(1, np.size(AMS_sort) + 1) / (1 + np.size(AMS_sort))
-    eRP = 1 / (1 - plot_pos)
-    if np.size(smev_RL) != 0:
-        # calculate uncertainty bounds. between 5% and 95%
-        RL_up = np.quantile(RL_unc, 0.95, axis=0)
-        RL_low = np.quantile(RL_unc, 0.05, axis=0)
-        smev_RL_up = np.quantile(smev_RL_unc, 0.95, axis=0)
-        smev_RL_low = np.quantile(smev_RL_unc, 0.05, axis=0)
-
-        # plot uncertainties
-        plt.fill_between(RP, RL_low, RL_up, color=TENAXcol, alpha=alpha)  # TENAX
-        plt.fill_between(
-            RP, smev_RL_low, smev_RL_up, color=smev_colshape[-1], alpha=alpha
-        )  # SMEV
-
-    plt.plot(RP, RL, TENAXcol, label=TENAXlabel)  # plot TENAX return levels
-    plt.plot(eRP, AMS_sort, obscol_shape, label=obslabel)  # plot observed return levels
-    if np.size(smev_RL) != 0:
-        plt.plot(RP, smev_RL, smev_colshape, label=smevlabel)  # plot SMEV return lvls
-
-    plt.xscale("log")
-    plt.xlabel("return period (years)")
-    plt.legend()
-    plt.xlim(xlimits[0], xlimits[1])
-    plt.ylim(ylimits[0], ylimits[1])
-
-
 def TNX_FIG_scaling(
     P,
     T,
@@ -1734,7 +1485,3 @@ def TNX_FIG_scaling(
     plt.legend(title=str(qs[0] * 100) + "th percentile lines computed by:")
 
     return scaling_rate_W, scaling_rate_q
-
-
-def all_bueno():
-    print("d(・ᴗ・)")
