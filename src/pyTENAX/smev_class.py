@@ -327,8 +327,24 @@ class SMEV:
 
         return intensity
 
-    def get_stats(df):
-        assert isinstance(df, pd.DataFrame), "df is not a pandas dataframe"
+    def get_stats(
+        df: pd.DataFrame,
+    ) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+        """Computes statistics of precipitation values.
+        Statistics are total percipitation per year, mean precipitation per year,
+        standard deviation of precipitation per year, and count of precipitation events per year.
+
+        Args:
+            df (pd.DataFrame): Dataframe with precipitation values.
+
+        Returns:
+            pd.Series: Total percipitation per year.
+            pd.Series: Mean percipitation per year.
+            pd.Series: Standard deviation of percipitation per year.
+            pd.Series: Count of percipitation events per year.
+        """
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("df is not a pandas dataframe")
 
         total_prec = df.groupby(df.index.year)["value"].sum()
         mean_prec = (
