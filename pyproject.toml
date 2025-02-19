@@ -12,7 +12,8 @@ dependencies = [
   "pyarrow==19.0.0",
   "scipy==1.14.1",
   "statsmodels==0.14.4",
-  "matplotlib==3.10.0"
+  "matplotlib==3.10.0",
+  "pre-commit==4.1.0"
 ]
 description = "Non-Asymptotic statistical model for eXtreme return levels (TENAX)"
 readme = "README.rst"
