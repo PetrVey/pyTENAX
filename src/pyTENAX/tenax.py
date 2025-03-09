@@ -8,7 +8,7 @@ import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
-from typing import Union, Tuple
+from typing import Union, Tuple, Dict
 
 
 class TENAX:
@@ -102,7 +102,7 @@ class TENAX:
         )  # Count not NaNs per year
         # Step 3: Estimate expected lenght of yearly timeseries
         expected = pd.DataFrame(index=yearly_valid.index)
-        expected["Total"] = 1440 / time_res * 365
+        expected["Total"] = 1440 / time_res * 365 # 1440 stands for the number of minutes in a day
         # Step 4: Calculate percentage of missing data per year by aligning the dimensions
         valid_percentage = yearly_valid[name_col] / expected["Total"]
         # Step 3: Filter out years where more than 10% of the values are NaN
@@ -129,18 +129,20 @@ class TENAX:
         """
 
         Function that extracts ordinary precipitation events out of the entire data.
+        This also check and delete for ordinary events with unknown start/end if check_gaps = True.
 
         Parameters
         ----------
-        - data np.array: array containing the hourly values of precipitation.
+        - data (np.array): array containing the hourly values of precipitation.
         - separation (int): The number of hours used to define an independet ordianry event. Defult: 24 hours. this is saved in SMEV S class
                         Days with precipitation amounts above this threshold are considered as ordinary events.
-        - name_col (string): The name of the df column with precipitation values.
-        - check_gaps (bool): This also check for gaps in data and for unknown start/end ordinary events
+        - name_col (string): The name of the pandas DataFrame column if input is pandas df.
+        - check_gaps (bool): Delete ordinary events with unknow start/end
 
         Returns
         -------
-        - consecutive_values np.array: index of time of consecutive values defining the ordinary events.
+        - consecutive_values (list): index of time of consecutive values defining the ordinary events.
+        
 
 
         Examples
@@ -259,15 +261,16 @@ class TENAX:
     def remove_short(
         self, list_ordinary: list
     ) -> Tuple[np.ndarray, np.ndarray, pd.Series]:
-        """Function that removes ordinary events too short.
+        """Function that removes ordinary events that are too short.
 
         Args:
             list_ordinary (list): list of indices of ordinary events as returned by `get_ordinary_events()`.
 
         Returns:
-            np.ndarray: Array with indices of events that are not too short.
-            np.ndarray: Array with tuple consisting of start and end dates of events that are not too short.
-            pd.Series: Series with the number of ordinary events per year.
+            arr_vals (np.ndarray): Array with indices of events that are not too short.
+            arr_dates (np.ndarray):  Array with tuple consisting of start and end dates of events that are not too short.
+            n_ordinary_per_year (pd.Series): Series with the number of ordinary events per year.
+
         """
         if not self.__incomplete_years_removed__:
             raise ValueError(
@@ -337,23 +340,22 @@ class TENAX:
 
     def get_ordinary_events_values(
         self, data: np.ndarray, dates: np.ndarray, arr_dates_oe
-    ):
+    ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, pd.DataFrame]]:
         """
+        Function that extract ordinary events and annual maximas out of precpitation data. 
+        
         Parameters
         ----------
-        data : np array
-            data of full dataset
-        dates : np array
-            time of full dataset
-        arr_dates_oe : TYPE
-            end and start of ordinary event, this is output from remove_short function.
+        data (np.ndarray): data of full precipitation dataset
+        dates (np.ndarray): time of full precipitation dataset
+        arr_dates_oe (np.ndarray): end and start of ordinary event as retruned by remove_short function.
 
         Returns
         -------
-        dict_ordinary : dict of pandas
-            ordinary events per duration.
-            dict_ordinary = {"10" : pd.DataFrame(columns=['year', 'oe_time', 'ordinary'])
-        dict_AMS : dict of pandas
+        dict_ordinary (dict): key is duration, value is pd.DataFrame with year, oe_time and value of ordinary event (eg. depth)
+            contains ordinary events values per duration.
+            example dict_ordinary = {"10" : pd.DataFrame(columns=['year', 'oe_time', 'ordinary'])
+        dict_AMS (dict): key is duration, value is pd.DataFrame with year and the annual maxima (AMS) value.
             contains anual maximas for each year per duration.
 
         """
@@ -421,25 +423,22 @@ class TENAX:
 
     def associate_vars(self, dict_ordinary, data_temperature, dates_temperature):
         """
-        Get additional variables for the ordinary events #TODO: have no clue about this one
-
+        Associate temperature with an ordinary event based on its start datetime.
+        The associated temperature is the mean of the past X hours, as defined by temp_time_hour.
+        The ordinary event is removed if a corresponding temperature cannot be found.
+        
         Parameters
         ----------
-        dict_ordinary : TYPE
-            DESCRIPTION.
-        data_temperature : TYPE
-            DESCRIPTION.
-        dates_temperature : TYPE
-            DESCRIPTION.
+        dict_ordinary (dict) : dictionary of ordinary events as retruned by get_ordinary_events_values function
+        data_temperature (np.ndarray): data of full precipitation dataset
+        dates_temperature (np.ndarray): time of full precipitation dataset
 
         Returns
         -------
-        dict_ordinary : TYPE
-            DESCRIPTION.
-        dict_dropped_oe : TYPE
-            DESCRIPTION.
-        n_ordinary_per_year_new : TYPE
-            DESCRIPTION.
+        dict_ordinary (dict) : A dictionary of ordinary events with associated temperature, categorized by duration
+                               example dict_ordinary = {"10" : pd.DataFrame(columns=['year', 'oe_time', 'ordinary', 'T'])
+        dict_dropped_oe (dict): A dictionary of dropped ordinary events for which the associated temperature was not found, categorized by duration
+        n_ordinary_per_year_new (pd.Series): Series with the number of ordinary events per year
 
         """
         # start here
@@ -452,7 +451,7 @@ class TENAX:
             arr_dates_oe = np.array(df_oe["oe_time"])
             ll_vals = []
 
-            # Use vectorized search for indices using pandas `merge_asof`
+            # Prepare indices for using pandas `merge_asof` function
             df_time_index = pd.DataFrame({"time_index": time_index})
             df_arr_dates_oe = pd.DataFrame({"oe_time": arr_dates_oe})
 
@@ -522,12 +521,9 @@ class TENAX:
 
         Parameters
         ----------
-        data_oe_prec : numpy.ndarray
-            Array of precipitation ordinary events data.
-        data_oe_temp : numpy.ndarray
-            Array of temperature ordinary events data.
-        thr : numpy.float64
-            Magnitude of precipitation threshold.
+        data_oe_prec (np.ndarray):  Array of precipitation ordinary events data.
+        data_oe_temp (np.ndarray): Array of temperature ordinary events data.
+        thr (np.float64): Magnitude of precipitation threshold.
 
         Returns
         -------
@@ -614,14 +610,15 @@ class TENAX:
         data_oe_temp : numpy.ndarray
             Temperature data.
         beta : float, optional
-            beta of the generalised normal distribution. if not defined, uses the beta defined in S. The default is 0.
+            beta of the generalised normal distribution. if not defined, uses the beta defined in S. The default is 4.
         method : string, optional
             Type of fit. "norm" is for the generalised normal distribution. "skewnorm" is for a skewed normal distribution. The default is "norm".
 
         Returns
         -------
-        g_phat: numpy.array
-            parameters of the temperature distribution. if "norm", [shape,scale]. if "skewnorm", also has skew. #TODO: I couldnt actually figure which was which for the skewnorm g_phat
+        g_phat (np.array): parameters of the temperature distribution. 
+                           if "norm", [shape,scale]. 
+                           if "skewnorm", [alpha,loc,scale] alpha controls skewness, loc is mean, scale is std
 
         """
         if beta == 0:
@@ -701,7 +698,7 @@ class TENAX:
 
         Returns
         -------
-        ret_lev : list (?) #TODO: check
+        ret_lev : list 
             Return levels at periods specified in self.return_period.
         T_mc : numpy.ndarray
             Monte Carlo generated temperature values.
@@ -762,7 +759,7 @@ class TENAX:
 
         return ret_lev, T_mc, P_mc
 
-    # uncerteinty TENAX MODEL HERE
+
     def TNX_tenax_bootstrap_uncertainty(
         self, P, T, blocks_id, Ts, temp_method="norm", method_root_scalar="brentq"
     ):
@@ -830,8 +827,7 @@ class TENAX:
 
             try:
                 # Left-censoring threshold
-                # TODO: double check on this, I think it should be from Pr not P
-                thr = np.quantile(P, perc_thres)
+                thr = np.quantile(Pr, perc_thres)
 
                 # TENAX model components
                 # Magnitude model
@@ -864,7 +860,10 @@ class TENAX:
 
 def wbl_leftcensor_loglik(theta, x, t, thr):
     """
-    TODO: I dont understand these things
+    Computes the log-likelihood for a left-censored Weibull distribution with temperature-dependent parameters.
+    
+    This function models precipitation using a Weibull distribution (tail model), where the shape and scale parameters depend on temperature.
+    Observations of precipitation below the threshold are left-censored, meaning their exact values are unknown.
 
     Parameters
     ----------
@@ -914,7 +913,11 @@ def wbl_leftcensor_loglik(theta, x, t, thr):
 
 def wbl_leftcensor_loglik_H0shape(theta, x, t, thr):
     """
-    TODO: Documentation
+    Computes the log-likelihood for a left-censored Weibull distribution with temperature-dependent parameters, 
+    where the b parameter of the Weibull shape parameter is not used (meaning b=0).
+    
+    This function models precipitation using a Weibull distribution (tail model), where the shape and scale parameters depend on temperature.
+    Observations of precipitation below the threshold are left-censored, meaning their exact values are unknown.
 
     Parameters
     ----------
@@ -965,7 +968,12 @@ def wbl_leftcensor_loglik_H0shape(theta, x, t, thr):
 
 def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
     """
-
+    Computes the log-likelihood for a left-censored Weibull distribution with temperature-dependent parameters, 
+    where the b parameter of the Weibull shape parameter is set by the user.
+    
+    This function models precipitation using a Weibull distribution (tail model), where the shape and scale parameters depend on temperature.
+    Observations of precipitation below the threshold are left-censored, meaning their exact values are unknown.
+    
     Parameters
     ----------
     theta : float
@@ -1015,15 +1023,18 @@ def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
 
 
 def gen_norm_pdf(x: np.ndarray, mu: float, sigma: float, beta: float) -> np.ndarray:
-    """Function computing the Generalized normal distribution PDF.
+    """
+    Function computing the Generalized normal distribution PDF.
 
-    Args:
+    Parameters
+    ----------
         x (np.ndarray): Data points.
         mu (float): Location parameter.
         sigma (float): Scale parameter.
         beta (float): Snape parameter.
 
-    Returns:
+    Returns
+    -------
         np.ndarray: Generalized normal distribution PDF
     """
     coeff = beta / (2 * sigma * gamma(1 / beta))
@@ -1032,14 +1043,17 @@ def gen_norm_pdf(x: np.ndarray, mu: float, sigma: float, beta: float) -> np.ndar
 
 
 def gen_norm_loglik(x: np.ndarray, par: list, beta: float) -> np.ndarray:
-    """Function computing the Log-likelihood for the Generalized normal distribution.
+    """
+    Function computing the Log-likelihood for the Generalized normal distribution.
 
-    Args:
+    Parameters
+    ----------
         x (np.ndarray): Data points.
         par (list): List of parameters [mu, sigma].
         beta (float): Snape parameter.
 
-    Returns:
+    Returns
+    -------
         np.ndarray: Log-likelihood for the Generalized normal distribution.
     """
     # Compute the log-likelihood
@@ -1061,7 +1075,8 @@ def randdf(size, df, flag):
     This is pythonized version of Matlab f randdf coded by halleyhit on Aug. 15th, 2018
     % Email: halleyhit@sjtu.edu.cn or halleyhit@163.com
 
-    Parameters:
+    Parameters
+    ----------
     size (int or tuple): Size of the output array. E.g., size=10 creates a 10-by-1 array,
                          size=(10, 2) creates a 10-by-2 matrix.
     df (numpy.ndarray): Density function, should be a 2-row matrix where the first row
@@ -1069,7 +1084,8 @@ def randdf(size, df, flag):
                         sampling points.
     flag (str): Flag to indicate 'pdf' or 'cdf'.
 
-    Returns:
+    Returns
+    -------
     numpy.ndarray: Array of random samples based on the defined pdf or cdf.
     """
 
@@ -1125,12 +1141,14 @@ def MC_tSMEV_cdf(
     """
     Calculate the cumulative distribution function (CDF) based on the given Weibull parameters.
 
-    Args:
+    Parameters
+    ----------
         y (Union[float, np.ndarray]): Value(s) at which to evaluate the CDF.
         wbl_phat (np.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
         n (int): Power to raise the final probability to.
 
-    Returns:
+    Returns
+    -------
         Tuple[float, np.ndarray]: Calculated CDF value(s).
     """
     p = 0
@@ -1150,13 +1168,15 @@ def SMEV_Mc_inversion(
     """
     Invert to find quantiles corresponding to the target return periods.
 
-    Args:
+    Parameters
+    ----------
         wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
         n (int): Power to raise the final probability to.
         target_return_periods (list or array-like): Desired target return periods.
         vguess (numpy.ndarray): Initial guesses for inversion.
 
-    Returns:
+    Returns
+    -------
         np.ndarray: Quantiles corresponding to the target return periods.
     """
     if isinstance(n, pd.Series):
@@ -1312,7 +1332,7 @@ def inverse_magnitude_model(F_phat, eT, qs):
 
 def TNX_obs_scaling_rate(P, T, qs, niter):
     """
-    calculate quantile regression parameters.
+    Calculate quantile regression parameters.
 
     Parameters
     ----------
@@ -1326,7 +1346,7 @@ def TNX_obs_scaling_rate(P, T, qs, niter):
     Returns
     -------
     qhat : numpy.ndarray
-        [something, scaling rate]. #TODO: I dont know what this is
+        [intercept, scaling rate].
 
     """
     T = sm.add_constant(T)  # Add a constant (intercept) term
