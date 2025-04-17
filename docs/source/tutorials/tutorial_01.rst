@@ -12,3 +12,4 @@ You can launch this notebook interactively via Binder:
    :maxdepth: 1
 
    untitled2.ipynb
+   tutorial_01.ipynb
