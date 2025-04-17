@@ -172,7 +172,7 @@ plt.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2))
 plt.show()
 
 # fig 2b
-hist, pdf_values = tenax.TNX_FIG_temp_model(T, g_phat, S.beta, eT)
+hist, pdf_values = plotting.TNX_FIG_temp_model(T, g_phat, S.beta, eT)
 plt.title("fig 2b")
 plt.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2))
 plt.show()
@@ -191,7 +191,7 @@ iTs = np.arange(-2.5, 37.5, 1.5)  # idk why we need a different T range here
 S.n_monte_carlo = np.size(P) * S.niter_smev
 _, T_mc, P_mc = S.model_inversion(F_phat, g_phat, n, Ts, gen_P_mc=True, gen_RL=False)
 print(f"Elapsed time model_inversion all: {time.time() - start_time:.4f} seconds")
-scaling_rate_W, scaling_rate_q = tenax.TNX_FIG_scaling(
+scaling_rate_W, scaling_rate_q = plotting.TNX_FIG_scaling(
     P, T, P_mc, T_mc, F_phat, S.niter_smev, eT, iTs
 )
 plt.title("fig 5")
@@ -227,7 +227,7 @@ combined_pdf = (winter_pdf * np.size(T_winter) + summer_pdf * np.size(T_summer))
 # fig 3
 
 
-_, _ = tenax.TNX_FIG_temp_model(
+_, _ = plotting.TNX_FIG_temp_model(
     T=T_summer,
     g_phat=g_phat_summer,
     beta=2,
@@ -239,7 +239,7 @@ _, _ = tenax.TNX_FIG_temp_model(
     xlimits=[-15, 30],
     ylimits=[0, 0.1],
 )
-_, _ = tenax.TNX_FIG_temp_model(
+_, _ = plotting.TNX_FIG_temp_model(
     T=T_winter,
     g_phat=g_phat_winter,
     beta=2,
@@ -251,7 +251,7 @@ _, _ = tenax.TNX_FIG_temp_model(
     xlimits=[-15, 30],
     ylimits=[0, 0.1],
 )
-_, _ = tenax.TNX_FIG_temp_model(
+_, _ = plotting.TNX_FIG_temp_model(
     T=T,
     g_phat=g_phat,
     beta=4,
@@ -330,7 +330,7 @@ RL2_predict, _, _ = S.model_inversion(F_phat1, g_phat2_predict, n2, Ts)
 
 # fig 7a
 
-_, _ = tenax.TNX_FIG_temp_model(
+_, _ = plotting.TNX_FIG_temp_model(
     T=T1,
     g_phat=g_phat1,
     beta=4,
@@ -340,7 +340,7 @@ _, _ = tenax.TNX_FIG_temp_model(
     obslabel=None,
     vallabel="Temperature model " + str(yrs_unique[0]) + "-" + str(midway),
 )
-_, _ = tenax.TNX_FIG_temp_model(
+_, _ = plotting.TNX_FIG_temp_model(
     T=T2,
     g_phat=g_phat2_predict,
     beta=4,

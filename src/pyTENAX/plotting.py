@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
+import statsmodels.api as sm
 from typing import Union
 
 from pyTENAX import tenax
@@ -125,9 +125,9 @@ def TNX_FIG_temp_model(
 
     # Plot analytical PDF of T (validation)
     if method == "skewnorm":
-        pdf_values = skewnorm.pdf(eT, *g_phat)
+        pdf_values = tenax.skewnorm.pdf(eT, *g_phat)
     elif method == "norm":
-        pdf_values = gen_norm_pdf(eT, g_phat[0], g_phat[1], beta)
+        pdf_values = tenax.gen_norm_pdf(eT, g_phat[0], g_phat[1], beta)
 
     plt.plot(eT, pdf_values, "-", color=valcol, label=vallabel)
 
@@ -261,15 +261,16 @@ def TNX_FIG_scaling(
         scaling rate of
 
     """
-    percentile_lines = inverse_magnitude_model(F_phat, eT, qs)
+    percentile_lines = tenax.inverse_magnitude_model(F_phat, eT, qs)
     scaling_rate_W = (np.exp(F_phat[3]) - 1) * 100
 
     # TODO: this doesn't seem quite right ... uncertainty is way off compared to paper
-    qhat, qhat_unc = TNX_obs_scaling_rate(P, T, qs[0], niter_smev)
+    # This is due to number of samples in bootstrapping, somehow this influenced unc of qs much more than in MATLAB
+    qhat, qhat_unc = TNX_obs_scaling_rate(P, T, qs[0], 1000)
     scaling_rate_q = (np.exp(qhat[1]) - 1) * 100
 
     # quantile regression uncertainties
-    q_reg_full_unc = np.zeros([len(iTs), niter_smev])
+    q_reg_full_unc = np.zeros([len(iTs), 1000])
     for i in np.arange(0, len(iTs)):
         q_reg_full_unc[i, :] = np.exp(qhat_unc[0, :]) * np.exp(iTs[i] * qhat_unc[1, :])
 
@@ -292,8 +293,8 @@ def TNX_FIG_scaling(
     T_mc_bins = np.reshape(T_mc, [np.size(T), niter_smev])
     P_mc_bins = np.reshape(P_mc, [np.size(P), niter_smev])
 
-    qperc_model = np.zeros([np.size(iTs), niter_smev])
-    qperc_obs = np.zeros([np.size(iTs), niter_smev])
+    qperc_model = np.zeros([np.size(iTs), 1000])
+    qperc_obs = np.zeros([np.size(iTs), 1000])
 
     for nit in range(niter_smev):
         for i in range(np.size(iTs) - 1):
@@ -374,13 +375,13 @@ def TNX_obs_scaling_rate(P, T, qs, niter):
     """
     T = sm.add_constant(T)  # Add a constant (intercept) term
     model = sm.QuantReg(np.log(P), T)
-    qhat = model.fit(q=qs).params
+    qhat = model.fit(q=qs, max_iter=10000).params
 
     qhat_unc = np.zeros([2, niter])
     for iter in np.arange(0, niter):
         rr = np.random.randint(0, len(T), size=(niter))
         model = sm.QuantReg(np.log(P[rr]), T[rr])
-        qhat_unc[:, iter] = model.fit(q=qs).params
+        qhat_unc[:, iter] = model.fit(q=qs, max_iter=10000).params
 
     return qhat, qhat_unc
 
