@@ -110,17 +110,18 @@ def TNX_FIG_valid(
     eRP = 1 / (1 - plot_pos)
     if np.size(smev_RL) != 0:
         # calculate uncertainty bounds. between 5% and 95%
-        RL_up = np.quantile(RL_unc, 0.95, axis=0)
-        RL_low = np.quantile(RL_unc, 0.05, axis=0)
         smev_RL_up = np.quantile(smev_RL_unc, 0.95, axis=0)
         smev_RL_low = np.quantile(smev_RL_unc, 0.05, axis=0)
-
         # plot uncertainties
-        plt.fill_between(RP, RL_low, RL_up, color=TENAXcol, alpha=alpha)  # TENAX
         plt.fill_between(
             RP, smev_RL_low, smev_RL_up, color=smev_colshape[-1], alpha=alpha
         )  # SMEV
 
+    if RL_unc.size > 0:
+        RL_up = np.quantile(RL_unc, 0.95, axis=0)
+        RL_low = np.quantile(RL_unc, 0.05, axis=0)
+        plt.fill_between(RP, RL_low, RL_up, color=TENAXcol, alpha=alpha)  # TENAX
+    
     plt.plot(RP, RL, TENAXcol, label=TENAXlabel)  # plot TENAX return levels
     plt.plot(eRP, AMS_sort, obscol_shape, label=obslabel)  # plot observed return levels
     if np.size(smev_RL) != 0:
