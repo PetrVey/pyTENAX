@@ -1,5 +1,5 @@
 Installation
-============
+============`
 
 For the moment the package is not available on pypi, so you need to install it from the source code.
 
