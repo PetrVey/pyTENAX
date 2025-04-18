@@ -41,3 +41,9 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "pyTENAX" = ["../res/*"] # Include the "res" folder that's outside "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]  # Tells setuptools to look for packages inside `src`
+
+[tool.setuptools.package-data]
+tenax = ["res/*"]  # Include files from `res/` which is outside `src/`
