@@ -1,17 +1,26 @@
+# readthedocs.yml
 version: 2
 
+# Define the build environment
 build:
-  os: ubuntu-24.04
-  tools:
-    python: "3.11"
+  image: "python:3.11"  # Python version to use for building docs
 
-python:
-  version: 3.11
-  install:
-    - conda:
-        environment: environment.yml  # This is fine, just this one is needed
-  script:
-    - pip install -e .  # Only install your package in editable mode
+# Install dependencies from the environment.yml file
+install:
+  - method: conda
+    file: environment.yml  # Path to your environment.yml file for dependencies
 
+# Define the steps to build the documentation
 sphinx:
-  configuration: docs/conf.py
+  configuration: docs/source/conf.py  # Path to your Sphinx config file
+
+# You can also specify the location of your source code if it's not in the default location
+directories:
+  - docs/source  # Path to your Sphinx source files
+  - src          # Include the source code if it needs to be available during documentation build
+
+# Optional: specify any extra configuration for your docs
+extra:
+  options: 
+    - "-Dhtml_theme=sphinx_rtd_theme"
+    - "-Dhtml_theme_options={'sticky_navigation': True}"
