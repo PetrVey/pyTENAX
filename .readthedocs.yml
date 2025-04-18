@@ -1,22 +1,17 @@
 version: 2
 
-# Build system: specify the OS, Python version, and other tools
 build:
-  os: ubuntu-24.04  # Specify the OS (ubuntu-24.04 is recommended)
+  os: ubuntu-24.04
   tools:
-    python: "3.11"  # Specify the Python version (use "3.11" instead of 3.11.5)
+    python: "3.11"
 
-# Installation instructions
 python:
-  version: 3.11  # Specify the Python version here as well
+  version: 3.11
   install:
     - conda:
-        environment: environment.yml  # Install Conda environment from environment.yml
-    - pip:
-        - git+https://github.com/PetrVey/pyTENAX.git@feature_RDT  # Install your package from GitHub
+        environment: environment.yml  # This is fine, just this one is needed
   script:
-    - pip install -e .  # Install the package in editable mode
+    - pip install -e .  # Only install your package in editable mode
 
-# Sphinx configuration for building documentation
 sphinx:
-  configuration: docs/conf.py  # Path to your conf.py file
+  configuration: docs/conf.py
