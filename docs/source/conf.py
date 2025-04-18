@@ -20,7 +20,8 @@ extensions = [ 'sphinx_rtd_theme',
               'sphinx.ext.autodoc',
               'sphinx.ext.napoleon',
               'sphinx.ext.viewcode',
-              'sphinx.ext.githubpages']
+              'sphinx.ext.githubpages',
+              'sphinx.ext.autodoc']
 
 templates_path = ['_templates']
 exclude_patterns = []

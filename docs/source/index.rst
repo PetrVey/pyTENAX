@@ -21,3 +21,10 @@ Welcome to pyTENAX's documentation!
 
    tutorials/tutorials
 
+
+.. toctree::
+   :caption: API Documentation
+   :maxdepth: 1
+
+   documentation/documentation
+
