@@ -1,0 +1,13 @@
+version: 2
+python:
+  version: 3.11.5
+  install:
+    - pip:
+        - git+https://github.com/PetrVey/pyTENAX.git@feature_RDT  # Install your package from Git
+    - requirements: environment.yml  # Install other dependencies from environment.yml
+  # Optionally, run a custom script to install your package in editable mode
+  script:
+    - pip install -e .  # Install the package in editable mode
+
+sphinx:
+  configuration: docs/conf.py  # Path to your conf.py file

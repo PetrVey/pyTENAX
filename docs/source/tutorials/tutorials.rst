@@ -11,4 +11,4 @@ You can launch this notebook interactively via Binder:
 .. toctree::
    :maxdepth: 1
 
-   tutorial_01.ipynb
+   Tutorial_01.ipynb
