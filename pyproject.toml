@@ -38,3 +38,7 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# Add this section to include 'res' folder in the package
+[tool.setuptools.package-data]
+"*" = ["res/*"]
