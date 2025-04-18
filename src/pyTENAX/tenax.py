@@ -7,7 +7,7 @@ import time
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-
+from concurrent.futures import ProcessPoolExecutor
 from typing import Union, Tuple, Dict
 
 
@@ -856,7 +856,109 @@ class TENAX:
                 n_err += 1
 
         return F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err
+    
+    def TNX_tenax_bootstrap_uncertainty_v2(self, P, T, blocks_id, Ts,
+                                           temp_method="norm",
+                                           method_root_scalar="brentq",
+                                           cpuworkers=4):
+        """
+        Bootstrap uncertainty estimation for the TENAX model.
 
+        Parameters:
+        - P: numpy array of precipitation data.
+        - T: numpy array of temperature data.
+        - blocks_id: numpy array of block identifiers (e.g., years).
+        - perc_thres: percentile threshold for left-censoring.
+        - S: object containing model parameters and methods.
+        - RP: return periods (numpy array).
+        - N: number of Monte Carlo simulations.
+        - Ts: time scales (numpy array).
+        - niter: number of bootstrap iterations.
+
+        Returns:
+        - F_phat_unc: array of magnitude model parameters from bootstrap samples.
+        - g_phat_unc: array of temperature model parameters from bootstrap samples.
+        - RL_unc: array of estimated return levels from bootstrap samples.
+        - n_unc: array of mean number of events per block from bootstrap samples.
+        - n_err: number of iterations where the model fitting failed.
+        """
+
+        perc_thres = self.left_censoring[1]
+        niter = self.niter_tnx
+        RP = self.return_period
+        
+        blocks = np.unique(blocks_id)
+        M = len(blocks)
+        randy = np.random.randint(0, M, size=(M, niter))
+        
+
+        # Initialize variables
+        F_phat_unc = np.full((niter, 4), np.nan)
+        if temp_method == "norm":
+           g_phat_unc = np.full((niter, 2), np.nan)
+        elif temp_method == "skewnorm":
+           g_phat_unc = np.full((niter, 3), np.nan)
+        else :
+           g_phat_unc = []
+        RL_unc = np.full((niter, len(RP)), np.nan)
+        n_unc = np.full(niter, np.nan)
+        n_err = 0
+
+        # Random sampling
+        args_list = [(ii, P, T, blocks_id, blocks, randy[:, ii], M, perc_thres, Ts, 
+                      temp_method, method_root_scalar, self)
+                     for ii in range(niter)]
+
+        ## Parallel execution
+        with ProcessPoolExecutor(max_workers=cpuworkers) as executor:
+            results = executor.map(_bootstrap_single_iteration, args_list)
+
+        
+        for i, (F_tmp, g_tmp, RL_tmp, n_tmp, err) in enumerate(results):
+               F_phat_unc[i, :] = F_tmp
+               g_phat_unc[i, :] = g_tmp
+               RL_unc[i, :] = RL_tmp
+               n_unc[i] = n_tmp
+               n_err += err
+
+        return F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err    
+
+def _bootstrap_single_iteration(args):
+    ii, P, T, blocks_id, blocks, randy_col, M, perc_thres, Ts, temp_method, method_root_scalar, self_obj = args
+    try:
+        Pr = []
+        Tr = []
+        Bid = []
+
+        for iy in range(M):
+            selected = blocks_id == blocks[randy_col[iy]]
+            Pr.append(P[selected])
+            Tr.append(T[selected])
+            Bid.append(np.full(np.sum(selected), iy + 1))  # MATLAB-style indexing
+
+        Pr = np.concatenate(Pr)
+        Tr = np.concatenate(Tr)
+        Bid = np.concatenate(Bid)
+
+        thr = np.quantile(P, perc_thres)
+
+        F_phat_temporary, _, _, _ = self_obj.magnitude_model(Pr, Tr, thr)
+        g_phat_temporary = self_obj.temperature_model(Tr, method=temp_method)
+        n_temporary = len(Pr) / M
+        
+        g_phat_temporary = [g_phat_temporary[0], 
+                            g_phat_temporary[1]]
+        n_temporary = n_temporary
+
+        RL_temporary, _, _ = self_obj.model_inversion(F_phat_temporary, g_phat_temporary,
+                                                       n_temporary, Ts,
+                                                       temp_method=temp_method,
+                                                       method_root_scalar=method_root_scalar)
+
+        return F_phat_temporary, g_phat_temporary, RL_temporary, n_temporary, 0
+    except Exception as err:
+        return np.full(4, np.nan), np.full(3 if temp_method == "skewnorm" else 2, np.nan), \
+               np.full(len(self_obj.return_period), np.nan), np.nan, 1
 
 def wbl_leftcensor_loglik(theta, x, t, thr):
     """
