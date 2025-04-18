@@ -17,4 +17,5 @@ dependencies:
   - ipykernel       # ipyrknel is to correctly made RTD
   - pip
   - pip:
+    - -e .                # THIS is the editable install
     - setuptools>=75.8.0
