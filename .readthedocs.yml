@@ -9,6 +9,10 @@ build:
 conda:
   environment: environment.yml
   
+python:
+  install:
+    - method: pip
+      path: .  # This is equivalent to running: pip install -e .
       
 # Define the steps to build the documentation
 sphinx:
