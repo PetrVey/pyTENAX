@@ -40,4 +40,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-"*" = ["res/*"]
+"pyTENAX" = ["../res/*"] # Include the "res" folder that's outside "src"
