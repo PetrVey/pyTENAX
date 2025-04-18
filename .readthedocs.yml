@@ -9,6 +9,11 @@ build:
 conda:
   environment: environment.yml
   
+python:
+  install:
+    - method: pip
+      path: .  # This is equivalent to running: pip install -e .
+      
 # Define the steps to build the documentation
 sphinx:
   configuration: docs/source/conf.py  # Path to your Sphinx config file
