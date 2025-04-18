@@ -884,7 +884,7 @@ class TENAX:
         """
 
         perc_thres = self.left_censoring[1]
-        niter = self.niter_tnx
+        niter = self.niter_tenax
         RP = self.return_period
         
         blocks = np.unique(blocks_id)
