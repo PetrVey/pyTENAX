@@ -1,0 +1,4 @@
+#!/bin/bash
+
+# Install the package in editable mode for Binder 
+pip install -e .
