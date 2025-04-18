@@ -11,9 +11,9 @@ dependencies:
   - setuptools=69.5.1
   - statsmodels=0.14.4
   - matplotlib=3.10.0
-  - sphinx  =  7.3.7                  # Add Sphinx here
-  - sphinx_rtd_theme  = 3.0.1         # Add Sphinx RTD theme here
-  - nbsphinx = 0.9.7            # Add nbsphinx extension here
+  - sphinx==7.3.7                  # Add Sphinx here
+  - sphinx_rtd_theme==3.0.1         # Add Sphinx RTD theme here
+  - nbsphinx==0.9.7            # Add nbsphinx extension here
   - pip
   - pip:
     - setuptools>=75.8.0
