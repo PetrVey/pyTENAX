@@ -1,13 +1,21 @@
 version: 2
+
+# Build system: specify the OS, Python version, and other tools
+build:
+  os: ubuntu-24.04  # Specify the OS (adjust as needed, though ubuntu-24.04 is recommended)
+  tools:
+    python: "3.11.5"  # Specify the Python version
+
+# Installation instructions
 python:
   version: 3.11.5
   install:
     - pip:
         - git+https://github.com/PetrVey/pyTENAX.git@feature_RDT  # Install your package from Git
     - requirements: environment.yml  # Install other dependencies from environment.yml
-  # Run a custom script if needed
   script:
     - pip install -e .  # Install the package in editable mode
 
+# Sphinx configuration for building documentation
 sphinx:
   configuration: docs/conf.py  # Path to your conf.py file
