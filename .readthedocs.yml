@@ -2,17 +2,18 @@ version: 2
 
 # Build system: specify the OS, Python version, and other tools
 build:
-  os: ubuntu-24.04  # Specify the OS (adjust as needed, though ubuntu-24.04 is recommended)
+  os: ubuntu-24.04  # Specify the OS (ubuntu-24.04 is the recommended)
   tools:
-    python: "3.12"  # Specify the Python version
+    python: "3.11"  # Specify the Python version (use "3.11" instead of 3.11.5)
 
 # Installation instructions
 python:
-  version: 3.12
+  version: 3.11  # Specify the Python version here as well (ensure it matches the environment.yml)
   install:
+    - conda:
+        environment: environment.yml  # Use Conda to install the environment from environment.yml
     - pip:
-        - git+https://github.com/PetrVey/pyTENAX.git@feature_RDT  # Install your package from Git
-    - requirements: environment.yml  # Install other dependencies from environment.yml
+        - git+https://github.com/PetrVey/pyTENAX.git@feature_RDT  # Install your package from GitHub
   script:
     - pip install -e .  # Install the package in editable mode
 
