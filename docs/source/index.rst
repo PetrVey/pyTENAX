@@ -19,5 +19,5 @@ Welcome to pyTENAX's documentation!
    :caption: Tutorials
    :maxdepth: 2
 
-   tutorials/tutorial_01
+   tutorials/tutorials
 

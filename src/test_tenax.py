@@ -1,22 +1,19 @@
-from os.path import dirname, join
-from os import getcwd
-import sys
-
+from pathlib import Path
+from os.path import join
 import numpy as np
 import pandas as pd
 import time
 import matplotlib.pyplot as plt
 from scipy.stats import chi2
-
+# Import pyTENAX
 from pyTENAX import smev, tenax, plotting
 
-# run this from src folder, otherwise it doesn't work
-THIS_DIR = dirname(getcwd())
-CODE_DIR = join(THIS_DIR, "src")
-RES_DIR = join(THIS_DIR, "res")
-sys.path.append(CODE_DIR)
-sys.path.append(RES_DIR)
+# Get the directory of tenax
+SOURCE_DIR = Path(tenax.__file__).resolve()
+HOME_DIR = SOURCE_DIR.parents[2]  # parents[2] is the third parent directory
+RES_DIR = join(HOME_DIR, "res")
 
+# Initiate TENAX class with customized setup
 S = tenax.TENAX(
     return_period=[
         2,
@@ -33,6 +30,7 @@ S = tenax.TENAX(
     alpha=0.05,
 )
 
+# Create input path file for the test file
 file_path_input = f"{RES_DIR}/prec_data_Aadorf.parquet"
 # Load data from csv file
 data = pd.read_parquet(file_path_input)
