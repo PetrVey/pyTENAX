@@ -12,7 +12,7 @@ dependencies:
   - statsmodels=0.14.4
   - matplotlib=3.10.0
   - sphinx==7.3.7           # Add Sphinx here for RTD
-  - sphinx_rtd_theme==3.0.  # Sphinx RTD theme here
+  - sphinx_rtd_theme==3.0.1 # Sphinx RTD theme here
   - nbsphinx==0.9.7         # Sphinx here for RTD
   - ipykernel       # ipyrknel is to correctly made RTD
   - pip
