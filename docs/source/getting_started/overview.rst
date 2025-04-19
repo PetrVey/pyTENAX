@@ -47,6 +47,17 @@ Cross-Language Implementations
 | • Skewed Normal (β fitted)        | ✅ (beta testing)      | ❌                     |
 +-----------------------------------+------------------------+------------------------+
 
+Developer community
+--------------------------------
+Current pyTENAX developers:
+Petr Vohnicky (PhD student at the University of Padova, petr.vohnicky@unipd.it)
+Ella Thomas (Research Assistant at the University of Padova)
+Jannis Hoch (Senior Hydrologist at Fathom)
+Rashid Akbary (PhD student at the University of Padova)
+
+We would like to express our gratitude to Riccardo Ciceri (riccardo.ciceri@studenti.unipd.it) for his contribution to the initial development phase of pyTENAX."
+
+
 Important notes
 --------------------------------
 pyTENAX also includes SMEV class (Simplified Metastatistical Extreme Value)
