@@ -12,7 +12,7 @@ conda:
 python:
   install:
     - method: pip
-      path: .  # This is equivalent to running: pip install -e .
+      path: .  
       
 # Define the steps to build the documentation
 sphinx:

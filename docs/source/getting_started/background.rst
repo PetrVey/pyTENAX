@@ -109,7 +109,7 @@ Although this dependence is less certain and can be masked by estimation uncerta
 
 Model parameters are estimated using **maximum likelihood**, with observations **left-censored** below a defined threshold :math:`\vartheta^*`.
 
-.. image:: ../images/fig_magnitude.png
+.. image:: /img/fig_magnitude.png
    :alt: Magnitude model
    :width: 80%
    :align: center
@@ -129,7 +129,7 @@ The probability density function (PDF) is given by:
 where *μ* and *σ* are the location and scale parameters, respectively. 
 These parameters can be estimated using the **maximum likelihood method**.
 
-.. image:: ../images/fig_temperature.png
+.. image:: /img/fig_temperature.png
    :alt: Temperatude model
    :width: 80%
    :align: center
@@ -154,7 +154,7 @@ The distribution of annual maxima is estimated using:
 
 Return levels are obtained by inverting this equation.
 
-.. image:: ../images/fig_returnlevels.png
+.. image:: /img/fig_returnlevels.png
    :alt: TENAX return levels
    :width: 80%
    :align: center
