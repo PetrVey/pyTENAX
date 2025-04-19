@@ -17,7 +17,7 @@ Welcome to pyTENAX's documentation!
    
 .. toctree::
    :caption: Tutorials
-   :maxdepth: 2
+   :maxdepth: 1
 
    tutorials/tutorials
 

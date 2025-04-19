@@ -31,7 +31,7 @@ Note that we also have example file that follows MATLAB example file and creates
 
 
 .. toctree::
-   :hidden:
+   :maxdepth: 1
 
    Tutorial_01.ipynb
    Tutorial_02.ipynb
