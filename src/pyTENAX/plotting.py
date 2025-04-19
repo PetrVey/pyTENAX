@@ -149,7 +149,7 @@ def TNX_FIG_valid(
     RP: list,
     RL: np.ndarray,
     smev_RL: Union[np.ndarray, list] = [],
-    RL_unc=0,
+    RL_unc: Union[np.ndarray, list] = [],
     smev_RL_unc=0,
     TENAXcol="b",
     obscol_shape="g+",
@@ -192,7 +192,7 @@ def TNX_FIG_valid(
             RP, smev_RL_low, smev_RL_up, color=smev_colshape[-1], alpha=alpha
         )  # SMEV
 
-    if RL_unc.size > 0:
+    if np.size(RL_unc) != 0:
         RL_up = np.quantile(RL_unc, 0.95, axis=0)
         RL_low = np.quantile(RL_unc, 0.05, axis=0)
         plt.fill_between(RP, RL_low, RL_up, color=TENAXcol, alpha=alpha)  # TENAX

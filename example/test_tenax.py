@@ -1,5 +1,4 @@
-from pathlib import Path
-from os.path import join
+from importlib_resources import files
 import numpy as np
 import pandas as pd
 import time
@@ -7,11 +6,6 @@ import matplotlib.pyplot as plt
 from scipy.stats import chi2
 # Import pyTENAX
 from pyTENAX import smev, tenax, plotting
-
-# Get the directory of tenax
-SOURCE_DIR = Path(tenax.__file__).resolve()
-HOME_DIR = SOURCE_DIR.parents[2]  # parents[2] is the third parent directory
-RES_DIR = join(HOME_DIR, "res")
 
 # Initiate TENAX class with customized setup
 S = tenax.TENAX(
@@ -31,7 +25,7 @@ S = tenax.TENAX(
 )
 
 # Create input path file for the test file
-file_path_input = f"{RES_DIR}/prec_data_Aadorf.parquet"
+file_path_input = files('pyTENAX.res').joinpath('prec_data_Aadorf.parquet')
 # Load data from csv file
 data = pd.read_parquet(file_path_input)
 # Convert 'prec_time' column to datetime, if it's not already
@@ -72,7 +66,7 @@ dict_ordinary, dict_AMS = S.get_ordinary_events_values(
 print(f"Elapsed time get OE: {time.time() - start_time:.4f} seconds")
 
 # load temperature data
-file_path_temperature = f"{RES_DIR}/temp_data_Aadorf.parquet"
+file_path_temperature = files('pyTENAX.res').joinpath('temp_data_Aadorf.parquet')
 t_data = pd.read_parquet(file_path_temperature)
 # Convert 'temp_time' column to datetime if it's not already in datetime format
 t_data["temp_time"] = pd.to_datetime(t_data["temp_time"])
