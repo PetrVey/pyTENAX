@@ -1,11 +1,11 @@
 Background & Theory 
 ====================
 
-The Clausius–Clapeyron (CC) relationship suggests that the atmosphere's capacity to hold water vapor increases exponentially with temperature, approximately
+The Clausius–Clapeyron (CC) relationship states that the atmosphere's capacity to hold water vapor increases exponentially with temperature, approximately
 
 .. math::
 
-   \sim 7\% \, ^\circ C^{-1}
+   \sim 6\text{--}7\% \, ^\circ C^{-1}
 
 This implies that extreme precipitation intensities are expected to rise with warming due to increased moisture availability. This thermodynamic link underpins the concept of **extreme precipitation–temperature scaling**, where extreme precipitation (often defined as the 95th or 99th percentile of wet intervals) increases exponentially with near-surface air temperature. Consequently, temperature is considered a strong physical covariate in non-stationary extreme value models.
 
@@ -57,7 +57,9 @@ function of the event magnitudes *F(x)* becomes:
 
 .. math::
 
-   F(x) = \int_{-\infty}^{+\infty} W(x; T) \cdot g(T) \, dT \tag{2}
+   F(x) = \int_D W(x; T) \cdot g(T) \, dT \tag{2}
+
+wher D is the domain of g(T).
 
 Magnitude model
 ------------------
@@ -65,14 +67,17 @@ The **magnitude model** has four parameters: **λ₀**, **a**, **κ₀**, and **
 
 | We first define independent **ordinary precipitation events** which follows two steps:
 | 1. **Independent storms** are defined as wet periods separated by dry intermissions of at least *d_dry* = 24 hours.
-| 2. **Ordinary events** of duration *d* are defined as the maximum intensity observed during each storm, 
+| 2. **Ordinary events** of duration *d* are defined as the duration-maxima of the intependent storms
+| and are derived as the maximum intensity observed during each storm
 | using a running window of size *d* and time steps equal to the temporal resolution of the data.
 | This framework ensures that the ordinary events share the statistical
-| properties of the **d-duration annual maxima** (such as scaling with duration) for all durations *d ≤ d_dry*.
-| 3. These ordinary events are paired with the average temperatures observed during *D* hours (D=24h) preceding peak intensities
+| properties of the **d-duration annual maxima** [Marra_et_al_2020]_ (such as scaling with duration) for all durations *d ≤ d_dry*.
+| 3. These ordinary events are paired with the average temperatures observed during *D_h* hours (D_h=24h) preceding peak intensities
  
-Then, we use the **Weibull distribution** to model the magnitudes of 
-sub-hourly precipitation events (ordinary events). 
+Then, we use the **Weibull distribution** to model the magnitudes of sub-hourly precipitation events (ordinary events). 
+This model, characterized by powered-exponential (Weibull-like) tails, is supported by thermodynamic arguments presented in [Wilson_and_Toumi_2005]_. 
+As their results focus on the tail of the distribution, we apply censoring to remain consistent with their framework.
+
 The **magnitude model**, denoted as *W(x; T)*, is a **non-stationary statistical model** that 
 describes the **exceedance probability** of extreme precipitation intensities as 
 a function of **temperature (T)**. This formulation incorporates 
@@ -117,8 +122,8 @@ Model parameters are estimated using **maximum likelihood**, with observations *
 Temperature Model
 -------------------
 
-In our example case, the average temperatures observed during *D* hours (D=24h) preceding peak intensities are well described 
-by a **generalized Gaussian distribution** with a shape parameter **β** = 4. 
+In our example case, the average temperatures observed during *D_h* hours (D_h=24h) preceding peak intensities are well described 
+by a **generalized Gaussian distribution** with a shape parameter **β** = 4. This models works well in the Alps and Germany (where we tested), but needs to be carefully selected if one goes into another region.
 
 The probability density function (PDF) is given by:
 
@@ -146,7 +151,7 @@ The distribution of annual maxima is estimated using:
 
 .. math::
 
-   G_{\text{TENAX}}(x) \approx \left( \frac{1}{N} \sum_{i=1}^{N} W(x; T_i) \right)^n \tag{7}
+   G_{\text{TENAX}}(x) = \int_D W(x; T) \cdot g(T) \, dT \tag{2} \approx \left( \frac{1}{N} \sum_{i=1}^{N} W(x; T_i) \right)^n \tag{7}
 
 | where:
 | - :math:`N` is the number of simulated events (e.g., :math:`2 \cdot 10^4`),
@@ -162,3 +167,11 @@ Return levels are obtained by inverting this equation.
 
 
 
+
+
+Supporting literature for background
+---------
+
+.. [Marra_et_al_2020] Marra, F., Borga, M., and Morin, E.: A unified framework for extreme subdaily precipitation frequency analyses based on ordinary events. Geophysical Research Letters, 47(18), e2020GL090209. https://doi.org/10.1029/2020GL090209, 2020
+
+.. [Wilson_and_Toumi_2005] Wilson, P. S., and Toumi, R.: A fundamental probability distribution for heavy rainfall. Geophysical Research Letters, 32(14), 1–4. https://doi.org/10.1029/2005GL022465, 2005

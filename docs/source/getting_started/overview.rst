@@ -25,7 +25,7 @@ Cross-Language Implementations
 
 | Original TENAX model has been developed in MATLAB:
 | TEmperature-dependent Non-Asymptotic statistical model for eXtreme return levels (TENAX)
-| Source code: https://zenodo.org/records/8345905
+| Source code: https://doi.org/10.5281/zenodo.8332232
 
 +-----------------------------------+------------------------+------------------------+
 | **Feature**                       | **PYTHON**             | **MATLAB**             |
@@ -50,22 +50,27 @@ Cross-Language Implementations
 Developer community
 --------------------------------
 Current pyTENAX developers:
-Petr Vohnicky (PhD student at the University of Padova, petr.vohnicky@unipd.it)
-Ella Thomas (Research Assistant at the University of Padova)
-Jannis Hoch (Senior Hydrologist at Fathom)
-Rashid Akbary (PhD student at the University of Padova)
+- Petr Vohnicky (PhD student at the University of Padova; petr.vohnicky@unipd.it)
+- Ella Thomas (Research Assistant at the University of Padova)
+- Jannis Hoch (Senior Hydrologist at Fathom)
+- Rashid Akbary (PhD student at the University of Padova)
 
-We would like to express our gratitude to Riccardo Ciceri (riccardo.ciceri@studenti.unipd.it) for his contribution to the initial development phase of pyTENAX."
+We would like to express our gratitude to Riccardo Ciceri (riccardo.ciceri@studenti.unipd.it) for his contribution to the initial development phase of pyTENAX.
 
 
 Important notes
 --------------------------------
 pyTENAX also includes SMEV class (Simplified Metastatistical Extreme Value)
 
-| For more information about SMEV, please see manuscript:  
-| Marra F, M Borga, E Morin, (2020). 
+| For more information about SMEV, please see manuscripts:
+| Francesco Marra, Davide Zoccatelli, Moshe Armon, Efrat Morin.
+| A simplified MEV formulation to model extremes emerging from multiple nonstationary underlying processes.
+| Advances in Water Resources, 127, 280-290, 2019
+| https://doi.org/10.1016/j.advwatres.2019.04.002
+  
+| Francesco Marra, Marco Borga, Efrat Morin.
 | A unified framework for extreme sub-daily precipitation frequency analyses based on ordinary events. 
-| Geophys. Res. Lett., 47, 18, e2020GL090209. 
+| Geophys. Res. Lett., 47, 18, e2020GL090209. 2020.
 | https://doi.org/10.1029/2020GL090209 
 
 | We have used pythonized version of SMEV code from:
