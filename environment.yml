@@ -1,20 +1,17 @@
 name: pytenax_env
 channels:
   - conda-forge
-  - defaults
+
 dependencies:
   - python=3.11.5
   - numpy=1.26.2
   - scipy=1.14.1
   - pandas=2.2.3
   - pyarrow=19.0.0
-  - setuptools=69.5.1
+  - setuptools>=75.8.0
   - statsmodels=0.14.4
   - matplotlib=3.10.0
   - sphinx==7.3.7           # Add Sphinx here for RTD
   - sphinx_rtd_theme==3.0.1 # Sphinx RTD theme here
   - nbsphinx==0.9.7         # Sphinx here for RTD
   - ipykernel       # ipyrknel is to correctly made RTD
-  - pip
-  - pip:
-    - setuptools>=75.8.0
