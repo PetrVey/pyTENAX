@@ -14,7 +14,7 @@ With Conda, run the following command in the root folder of the repository.
 .. code-block:: bash
 
     # create pytenax environment
-    conda env create -f env.yml
+    conda env create -f environment.yml
     # activate pytenax environment
     conda activate pytenax_env
     # install pytenax in editable mode
