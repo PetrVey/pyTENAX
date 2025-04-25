@@ -5,7 +5,7 @@ The Clausius–Clapeyron (CC) relationship states that the atmosphere's capacity
 
 .. math::
 
-   \sim 6\text{--}7\% \, ^\circ C^{-1}
+   \sim 6\text{-}7\% \, ^\circ C^{-1}
 
 This implies that extreme precipitation intensities are expected to rise with warming due to increased moisture availability. This thermodynamic link underpins the concept of **extreme precipitation–temperature scaling**, where extreme precipitation (often defined as the 95th or 99th percentile of wet intervals) increases exponentially with near-surface air temperature. Consequently, temperature is considered a strong physical covariate in non-stationary extreme value models.
 
@@ -59,7 +59,7 @@ function of the event magnitudes *F(x)* becomes:
 
    F(x) = \int_D W(x; T) \cdot g(T) \, dT \tag{2}
 
-wher D is the domain of g(T).
+where D is the domain of g(T).
 
 Magnitude model
 ------------------
@@ -129,7 +129,7 @@ The probability density function (PDF) is given by:
 
 .. math::
 
-    g(T) = \frac{\beta}{2 \sigma \Gamma\left(\frac{1}{\beta}\right)} \exp \left[ - \left( \frac{T - \mu}{\sigma} \right)^{\beta} \right] 
+    g(T) = \frac{\beta}{2 \sigma \Gamma\left(\frac{1}{\beta}\right)} \exp \left[ - \left( \frac{T - \mu}{\sigma} \right)^{\beta} \right] \tag{6}
 
 where *μ* and *σ* are the location and scale parameters, respectively. 
 These parameters can be estimated using the **maximum likelihood method**.
@@ -151,7 +151,7 @@ The distribution of annual maxima is estimated using:
 
 .. math::
 
-   G_{\text{TENAX}}(x) = \int_D W(x; T) \cdot g(T) \, dT \tag{2} \approx \left( \frac{1}{N} \sum_{i=1}^{N} W(x; T_i) \right)^n \tag{7}
+   G_{\text{TENAX}}(x) = \int_D W(x; T) \cdot g(T) \, dT  \approx \left( \frac{1}{N} \sum_{i=1}^{N} W(x; T_i) \right)^n \tag{7}
 
 | where:
 | - :math:`N` is the number of simulated events (e.g., :math:`2 \cdot 10^4`),

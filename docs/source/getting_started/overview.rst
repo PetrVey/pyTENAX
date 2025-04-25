@@ -50,6 +50,7 @@ Cross-Language Implementations
 Developer community
 --------------------------------
 Current pyTENAX developers:
+
 - Petr Vohnicky (PhD student at the University of Padova; petr.vohnicky@unipd.it)
 - Ella Thomas (Research Assistant at the University of Padova)
 - Jannis Hoch (Senior Hydrologist at Fathom)
@@ -76,5 +77,5 @@ pyTENAX also includes SMEV class (Simplified Metastatistical Extreme Value)
 | We have used pythonized version of SMEV code from:
 | https://github.com/luigicesarini/pysmev 
 | The original code of SMEV written in Matlab is available from:
-| https://zenodo.org/records/11934843
+| https://doi.org/10.5281/zenodo.3971557
 
