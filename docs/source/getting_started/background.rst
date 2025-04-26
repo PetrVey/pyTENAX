@@ -170,7 +170,7 @@ Return levels are obtained by inverting this equation.
 
 
 Supporting literature for background
----------
+---------------------------------------------
 
 .. [Marra_et_al_2020] Marra, F., Borga, M., and Morin, E.: A unified framework for extreme subdaily precipitation frequency analyses based on ordinary events. Geophysical Research Letters, 47(18), e2020GL090209. https://doi.org/10.1029/2020GL090209, 2020
 

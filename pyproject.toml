@@ -28,6 +28,9 @@ authors = [
 ]
 maintainers = [
   {name = "Petr Vohnicky", email = "petr.vohnicky@unipd.it"},
+  {name = "Ella Thomas"},
+  {name = "Jannis Hoch"},
+  {name = "Rashid Akbary"},
 ]
 
 [project.urls]
