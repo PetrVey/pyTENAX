@@ -6,6 +6,8 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+# TODO: options can be more spefici, check later + change release after release
+
 project = 'pyTENAX'
 copyright = '2025, Petr Vohnicky'
 author = 'Petr Vohnicky'
