@@ -14,6 +14,8 @@ have been used to estimate future changes. However, they face notable limitation
 they cannot reliably estimate very high return levels (e.g., 𝒯-year extremes), 
 often assume constant storm frequency, and struggle with observed non-linearities—such as the “hook” structure, 
 where the scaling breaks down at high temperatures due to humidity constraints or data scarcity. 
+An another drawback of this traditional p-t scaling is that the percentile are computed based on all wet-day intervals, 
+and thus, they are sensitive to changes in rainfall occurrence and intensity and can't be directly translated into extreme return levels.
 These drawbacks highlight the need for more robust and physically-consistent models, 
 like TENAX, that account for the full distribution and changing event frequencies.
 
@@ -66,7 +68,7 @@ Magnitude model
 The **magnitude model** has four parameters: **λ₀**, **a**, **κ₀**, and **b**.
 
 | We first define independent **ordinary precipitation events** which follows two steps:
-| 1. **Independent storms** are defined as wet periods separated by dry intermissions of at least *d_dry* = 24 hours.
+| 1. **Independent storms** are defined as wet periods separated by dry intermissions of at least *d_dry* = 24 hours. This d_dry interval between storms can of course be adjusted based on needs.
 | 2. **Ordinary events** of duration *d* are defined as the duration-maxima of the intependent storms
 | and are derived as the maximum intensity observed during each storm
 | using a running window of size *d* and time steps equal to the temporal resolution of the data.
