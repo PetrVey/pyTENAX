@@ -9,21 +9,21 @@ All tutorial Jupyter notebooks can be launched interactively via Binder by click
 
   .. note::
      This tutorial can also be launched interactively via 
-     `Binder Tutorial 01 <https://mybinder.org/v2/gh/PetrVey/pyTENAX/feature_RDT?urlpath=%2Fdoc%2Ftree%2Fdocs%2Fsource%2Ftutorials%2FTutorial_01.ipynb>`_.
+     `Binder Tutorial 01 <https://mybinder.org/v2/gh/PetrVey/pyTENAX/main?urlpath=%2Fdoc%2Ftree%2Fdocs%2Fsource%2Ftutorials%2FTutorial_01.ipynb>`_.
 
 
 - `Tutorial 02: TENAX vs SMEV (extreme value method) <Tutorial_02.ipynb>`_
 
   .. note::
      This tutorial can also be launched interactively via 
-     `Binder Tutorial 02 <https://mybinder.org/v2/gh/PetrVey/pyTENAX/feature_RDT?urlpath=%2Fdoc%2Ftree%2Fdocs%2Fsource%2Ftutorials%2FTutorial_02.ipynb>`_.
+     `Binder Tutorial 02 <https://mybinder.org/v2/gh/PetrVey/pyTENAX/main?urlpath=%2Fdoc%2Ftree%2Fdocs%2Fsource%2Ftutorials%2FTutorial_02.ipynb>`_.
 
 
 - `Tutorial 03: TENAX Hindcast evaluation <Tutorial_03.ipynb>`_
 
   .. note::
      This tutorial can also be launched interactively via 
-     `Binder Tutorial 03 <https://mybinder.org/v2/gh/PetrVey/pyTENAX/feature_RDT?urlpath=%2Fdoc%2Ftree%2Fdocs%2Fsource%2Ftutorials%2FTutorial_03.ipynb>`_.
+     `Binder Tutorial 03 <https://mybinder.org/v2/gh/PetrVey/pyTENAX/main?urlpath=%2Fdoc%2Ftree%2Fdocs%2Fsource%2Ftutorials%2FTutorial_03.ipynb>`_.
 
 
 Note that we also have example file that follows MATLAB example file and creates similar plots as in TENAX manuscript

@@ -11,7 +11,7 @@
 project = 'pyTENAX'
 copyright = '2025, Petr Vohnicky'
 author = 'Petr Vohnicky'
-release = '0.0.1'
+release = '0.1.0'
 
 
 # -- General configuration ---------------------------------------------------
