@@ -4,12 +4,9 @@ from scipy.special import gamma
 from scipy.stats import weibull_min, norm, skewnorm, chi2
 from scipy.optimize import root_scalar, minimize
 import time
-import statsmodels.api as sm
-import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-
 from typing import Union, Tuple, Dict
-
+from multiprocessing.dummy import Pool as ThreadPool
 
 class TENAX:
     def __init__(
@@ -856,7 +853,6 @@ class TENAX:
                 n_err += 1
 
         return F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err
-
 
 def wbl_leftcensor_loglik(theta, x, t, thr):
     """

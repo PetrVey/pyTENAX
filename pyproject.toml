@@ -28,6 +28,9 @@ authors = [
 ]
 maintainers = [
   {name = "Petr Vohnicky", email = "petr.vohnicky@unipd.it"},
+  {name = "Ella Thomas"},
+  {name = "Jannis Hoch"},
+  {name = "Rashid Akbary"},
 ]
 
 [project.urls]
@@ -36,5 +39,5 @@ url = "https://github.com/PetrVey/pyTENAX"
 [tool.setuptools]
 package-dir = {"" = "src"}
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools.package-data]
+pyTENAX = ["res/*"]
