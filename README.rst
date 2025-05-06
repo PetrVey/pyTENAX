@@ -2,92 +2,85 @@
 PyTENAX
 =================
 
-PyTENAX contains a set of methods to apply the Non-Asymptotic statistical model for eXtreme
-return levels (TENAX).
-Presented in manuscript:
-Marra, F., Koukoula, M., Canale, A., & Peleg, N. (2023). Predicting extreme sub-hourly precipitation intensification based on temperature shifts. Hydrology and Earth System Sciences Discussions, 2023, 1-23.
-https://doi.org/10.5194/hess-28-375-2024
+| PyTENAX contains a set of methods to apply the Non-Asymptotic statistical model for eXtreme return levels (TENAX).
+| Presented in manuscript:
+| Marra, F., Koukoula, M., Canale, A., & Peleg, N. (2023). 
+| Predicting extreme sub-hourly precipitation intensification based on temperature shifts. 
+| Hydrology and Earth System Sciences Discussions, 2023, 1-23.
+| https://doi.org/10.5194/hess-28-375-2024
 
 Original TENAX model coded in Matlab:
 TEmperature-dependent Non-Asymptotic statistical model for eXtreme return levels (TENAX)
-https://zenodo.org/records/8345905
+https://doi.org/10.5281/zenodo.8332232
 
 
 pyTENAX repository also includes SMEV class (Simplified Metastatistical Extreme Value)
-For more information, please see manuscript:
-Marra F, M Borga, E Morin, 2020. A unified framework for extreme sub-daily precipitation frequency analyses based on ordinary events. Geophys. Res. Lett., 47, 18, e2020GL090209. https://doi.org/10.1029/2020GL090209 
+
+| For more information about SMEV, please see manuscripts:
+| Francesco Marra, Davide Zoccatelli, Moshe Armon, Efrat Morin.
+| A simplified MEV formulation to model extremes emerging from multiple nonstationary underlying processes.
+| Advances in Water Resources, 127, 280-290, 2019
+| https://doi.org/10.1016/j.advwatres.2019.04.002
+  
+| Francesco Marra, Marco Borga, Efrat Morin.
+| A unified framework for extreme sub-daily precipitation frequency analyses based on ordinary events. 
+| Geophys. Res. Lett., 47, 18, e2020GL090209. 2020.
+| https://doi.org/10.1029/2020GL090209 
+
 pythonized versionof SMEV downloaded from:
 https://github.com/luigicesarini/pysmev
 
 Installation
 ------------
-Install using:
-
-Python version required: <3.12
-
-Module required can be found in either requirements.txt or env.yml
-
 For the moment the package is not available on pypi, so you need to install it from the source code.
-To do so, clone the repository and run the following command in the root folder of the repository:
+To do so, clone the repository and run the following command in the root folder of the repository.
+  
+With Conda 
 
 .. code-block:: bash
-    
-   pip install .
+
+    # create pytenax environment
+    conda env create -f environment.yml
+    # activate pytenax environment
+    conda activate pytenax_env
+    # install pytenax in editable mode
+    python -m pip install -e .
 
 Usage
 -----
-!! TO COMPLETE !!
+Background and Jupyter notebook examples (available also in Binder) are included in our readthedocs.
 
-The class contains the following methods:
-
-!! TO COMPLETE !!
-
-The following is an example of how to use the class:
+For a complete example of how to use the class, run the file `test_tenax.py` in the `example` folder with the following command:
 
 .. code-block:: python
 
-    #TODO
-
-
-
-For a complete example of how to use the class, run the file `test_tenax.py` in the `src` folder with the following command:
-
-.. code-block:: python
-
-    python src/test_smev.py
-
-
+    python example/test_tenax.py
 
 Development
 -----------
-Please work on a feature branch and create a pull request to the development 
-branch. If necessary to merge manually do so without fast forward:
-
-.. code-block:: bash
-
-    git merge --no-ff myfeature
-
 To build a development environment run:
-
-.. code-block:: bash
-
-    python3 -m venv env 
-    source env/bin/activate 
-    pip install -e .
-    pip install -r requirements.txt
 
 With Conda 
 
 .. code-block:: bash
 
-    conda env create -f env.yml
-    conda activate env
-    pip install -e .
+    conda env create -f environment.yml
+    conda activate pytenax_env
+    python -m pip install -e .
 
 
-Rebuild is done by setup.py inside of new branch.
-.. code-block::
-    setup.py sdist bdist_wheel
+Please work on a feature branch and create a pull request to the source branch.
+To ensure formatting consistency, please install the pre-commit hooks by running:
+
+.. code-block:: bash
+
+    pre-commit install
+
+If necessary to merge manually do so without fast forward:
+
+.. code-block:: bash
+
+    git merge --no-ff myfeature
 
 Contributions
 -------------
