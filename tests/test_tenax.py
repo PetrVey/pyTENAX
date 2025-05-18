@@ -194,8 +194,107 @@ class TestTENAX(unittest.TestCase):
         self.assertAlmostEqual(temp_sum, 27096.004, places=3, msg="Temperature sum does not match expected")
     
         # Assert sum of n_ordinary_per_year equals expected 2634
-        print(n_ordinary_per_year.sum())
         self.assertEqual(n_ordinary_per_year.sum().item(), 2634, "Sum of ordinary events per year does not match expected")
+
+    def test_magnitude_model(self):
+        """
+        Test the magnitude_model method to ensure the magnitude model is fitted correctly.
+        """
+        # Re-run the chain of methods needed for this function
+        name_col = "prec_values"
+        cleaned_data = self.S.remove_incomplete_years(self.data.copy(), name_col)
+        df_arr = np.array(cleaned_data[name_col])
+        df_dates = np.array(cleaned_data.index)
+        idx_ordinary = self.S.get_ordinary_events(data=df_arr, dates=df_dates, name_col=name_col, check_gaps=False)
+        arr_vals, arr_dates, _ = self.S.remove_short(idx_ordinary)
+        dict_ordinary, _ = self.S.get_ordinary_events_values(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates)
+        dict_ordinary, _, _ = self.S.associate_vars(dict_ordinary, self.df_arr_t_data, self.df_dates_t_data)
+    
+        # Extract values for duration "10"
+        P = dict_ordinary["10"]["ordinary"].to_numpy()
+        T = dict_ordinary["10"]["T"].to_numpy()
+        
+        # Calculate the threshold
+        thr = dict_ordinary["10"]["ordinary"].quantile(self.S.left_censoring[1])
+
+        # Run magnitude model
+        F_phat, loglik, _, _ = self.S.magnitude_model(P, T, thr)
+    
+        # Basic checks
+        self.assertIsNotNone(F_phat, "F_phat should not be None")
+        self.assertTrue(np.isfinite(loglik), "loglik should be a finite number")
+        self.assertGreater(loglik, -1e6, "loglik should be reasonably large (not extreme negative)")
+    
+        # Check the exact values of F_phat
+        expected_F_phat = np.array([0.8655, 0.0, 0.3131, 0.1112])
+        np.testing.assert_array_almost_equal(F_phat.round(4), expected_F_phat, decimal=4, err_msg="F_phat values do not match expected output")
+
+    def test_temperature_model(self):
+        """
+        Test the temperature_model method to ensure the temperature model is fitted correctly.
+        """
+        # Re-run the full chain of methods needed for this function
+        name_col = "prec_values"
+        cleaned_data = self.S.remove_incomplete_years(self.data.copy(), name_col)
+        df_arr = np.array(cleaned_data[name_col])
+        df_dates = np.array(cleaned_data.index)
+        idx_ordinary = self.S.get_ordinary_events(data=df_arr, dates=df_dates, name_col=name_col, check_gaps=False)
+        arr_vals, arr_dates, _ = self.S.remove_short(idx_ordinary)
+        dict_ordinary, _ = self.S.get_ordinary_events_values(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates)
+        dict_ordinary, _, _ = self.S.associate_vars(dict_ordinary, self.df_arr_t_data, self.df_dates_t_data)
+    
+        # Extract temperature values from the associated dictionary
+        T = dict_ordinary["10"]["T"].to_numpy()
+    
+        # Run the temperature model
+        g_phat = self.S.temperature_model(T)
+    
+        # Basic checks
+        self.assertIsNotNone(g_phat, "g_phat should not be None")
+        self.assertEqual(len(g_phat), 2, "g_phat should have exactly two parameters")
+    
+        # Check the exact values of g_phat
+        expected_g_phat = np.array([9.8198, 12.3587])
+        np.testing.assert_array_almost_equal(g_phat.round(4), expected_g_phat, decimal=4, err_msg="g_phat values do not match expected output")
+
+    def test_model_inversion(self):
+        """
+        Test the model_inversion method with Monte Carlo variability in mind.
+        """
+        # Re-run the full chain of methods needed for this function
+        name_col = "prec_values"
+        cleaned_data = self.S.remove_incomplete_years(self.data.copy(), name_col)
+        df_arr = np.array(cleaned_data[name_col])
+        df_dates = np.array(cleaned_data.index)
+        idx_ordinary = self.S.get_ordinary_events(data=df_arr, dates=df_dates, name_col=name_col, check_gaps=False)
+        arr_vals, arr_dates, n_ordinary_per_year = self.S.remove_short(idx_ordinary)
+        dict_ordinary, _ = self.S.get_ordinary_events_values(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates)
+        dict_ordinary, _, _ = self.S.associate_vars(dict_ordinary, self.df_arr_t_data, self.df_dates_t_data)
+    
+        # Prepare inputs for model_inversion
+        P = dict_ordinary["10"]["ordinary"].to_numpy()
+        T = dict_ordinary["10"]["T"].to_numpy()
+        thr = dict_ordinary["10"]["ordinary"].quantile(self.S.left_censoring[1])
+        Ts = np.arange(np.min(T) - self.S.temp_delta, np.max(T) + self.S.temp_delta, self.S.temp_res_monte_carlo)
+        F_phat, _, _, _ = self.S.magnitude_model(P, T, thr)
+        g_phat = self.S.temperature_model(T)
+        n = n_ordinary_per_year.sum() / len(n_ordinary_per_year)
+    
+        # Run the model_inversion
+        RL, _, _ = self.S.model_inversion(F_phat, g_phat, n, Ts)
+    
+        # Expected range (based on typical outputs)
+        expected_RL = np.array([11.2, 16.4, 20.3, 24.4, 30.1, 34.7, 39.6])
+        buffer = 0.1  # 10% buffer
+    
+        # Check each RL element individually
+        for i, (rl, expected) in enumerate(zip(RL, expected_RL)):
+            lower_bound = expected * (1 - buffer)
+            upper_bound = expected * (1 + buffer)
+            self.assertTrue(
+                lower_bound <= rl <= upper_bound,
+                f"RL[{i}] = {rl:.4f} not within expected range ({lower_bound:.4f} to {upper_bound:.4f})"
+                )
 
     @classmethod
     def tearDownClass(cls):
