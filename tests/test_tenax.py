@@ -3,6 +3,16 @@
 Created on Sat May 17 18:31:24 2025
 
 @author: Petr
+
+NOTE:
+These tests are tightly coupled to the specific input dataset currently in use -> "prec_data_Aadorf.parquet".
+If the underlying time series data changes (e.g., different date range, missing years, values), ALL TESTS WILL FAIL.
+Make sure to revisit and update test expectations accordingly when the dataset changes.
+
+IMPORTANT:
+Many tests in this suite are chained — they rely on the same preprocessing steps (e.g., removing incomplete years,
+detecting and filtering ordinary events, etc.). If one method fails or the data structure changes, it can cause 
+multiple downstream test failures. This is by design to ensure the integrated workflow is working as expected.
 """
 
 import unittest
