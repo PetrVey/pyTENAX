@@ -154,12 +154,12 @@ class TestTENAX(unittest.TestCase):
         
         # Assert sum of the 'ordinary' column for duration "10" matches expected value
         total_ordinary = dict_ordinary["10"].ordinary.sum()
-        self.assertAlmostEqual(total_ordinary, 4042.0, places=2,
+        self.assertEqual(total_ordinary, 4042.0,
                                msg="Sum of ordinary events for duration 10 should be approximately 4042.0")
         
         # Assert sum of the 'AMS' column for duration "10" matches expected value
         total_AMS = dict_AMS["10"].AMS.sum()
-        self.assertAlmostEqual(total_AMS, 474.2, places=2,
+        self.assertEqual(total_AMS, 474.2, 
                                msg="Sum of AMS for duration 10 should be approximately 474.2")
 
 
@@ -201,7 +201,7 @@ class TestTENAX(unittest.TestCase):
         
         # Assert Temperature sum is close to expected
         temp_sum = dict_ordinary_updated["10"]["T"].sum()
-        self.assertAlmostEqual(temp_sum, 27096.004, places=3, msg="Temperature sum does not match expected")
+        self.assertEqual(temp_sum, 27096.004, "Temperature sum does not match expected")
     
         # Assert sum of n_ordinary_per_year equals expected 2634
         self.assertEqual(n_ordinary_per_year.sum().item(), 2634, "Sum of ordinary events per year does not match expected")
@@ -237,7 +237,10 @@ class TestTENAX(unittest.TestCase):
     
         # Check the exact values of F_phat
         expected_F_phat = np.array([0.8655, 0.0, 0.3131, 0.1112])
-        np.testing.assert_array_almost_equal(F_phat.round(4), expected_F_phat, decimal=4, err_msg="F_phat values do not match expected output")
+        
+        # assertAlmostEqual is used with 4 decimal places for comparing floating-point values.
+        # This level of precision is sufficient to account for minor differences between Python and MATLAB outputs.
+        np.testing.assert_array_almost_equal(F_phat, expected_F_phat, decimal=4, err_msg="F_phat values do not match expected output")
 
     def test_temperature_model(self):
         """
@@ -265,7 +268,9 @@ class TestTENAX(unittest.TestCase):
     
         # Check the exact values of g_phat
         expected_g_phat = np.array([9.8198, 12.3587])
-        np.testing.assert_array_almost_equal(g_phat.round(4), expected_g_phat, decimal=4, err_msg="g_phat values do not match expected output")
+        # assertAlmostEqual is used with 4 decimal places for comparing floating-point values.
+        # This level of precision is sufficient to account for minor differences between Python and MATLAB outputs.
+        np.testing.assert_array_almost_equal(g_phat, expected_g_phat, decimal=4, err_msg="g_phat values do not match expected output")
 
     def test_model_inversion(self):
         """
@@ -295,7 +300,10 @@ class TestTENAX(unittest.TestCase):
     
         # Expected range (based on typical outputs)
         expected_RL = np.array([11.2, 16.4, 20.3, 24.4, 30.1, 34.7, 39.6])
-        buffer = 0.1  # 10% buffer
+        
+        # model_inversion uses Monte Carlo sampling, introducing variability in results.
+        # A 5% buffer is used to account for non-deterministic return levels across runs.
+        buffer = 0.05  # 5% buffer for variability due to Monte Carlo randomness in T sampling
     
         # Check each RL element individually
         for i, (rl, expected) in enumerate(zip(RL, expected_RL)):
