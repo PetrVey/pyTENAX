@@ -36,7 +36,7 @@ name_col = "prec_values"  # name of column containing data to extract
 
 start_time = time.time()
 
-# push values belows 0.1 to 0 in prec due to
+# push values belows S.min to 0 in prec, this is due to fact that some datasets are having drizzle issues.
 data.loc[data[name_col] < S.min_rain, name_col] = 0
 
 
