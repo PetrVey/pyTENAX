@@ -18,6 +18,7 @@ def TNX_FIG_magn_model(
     valcol="b",
     xlimits: list = [-12, 30],
     ylimits: list = [0.1, 1000],
+    b_exp = False
 ) -> None:
     """Plots Figure 2a of Marra et al. (2024), the observed T-P pairs and the W model percentiles.
 
@@ -33,7 +34,7 @@ def TNX_FIG_magn_model(
         xlimits (list, optional): x limits of plot. Defaults to [-12, 30].
         ylimits (list, optional): y limits of plot. Defaults to [0.1, 1000].
     """
-    percentile_lines = tenax.inverse_magnitude_model(F_phat, eT, qs)
+    percentile_lines = tenax.inverse_magnitude_model(F_phat, eT, qs, b_exp = b_exp)
     plt.scatter(T, P, s=1, color=obscol, label="Observations")
     plt.plot(
         eT,
