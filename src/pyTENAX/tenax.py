@@ -511,16 +511,24 @@ class TENAX:
         )
 
         return dict_ordinary, dict_dropped_oe, n_ordinary_per_year_new
-
-    def magnitude_model(self, data_oe_prec, data_oe_temp, thr, b_set=None):
+    
+    def magnitude_model(self, data_oe_prec, data_oe_temp, thr, b_set = None, b_exp = False):
         """
-        Fits the data to the magnitude model of TENAX.
+        Fits the data to the magnitude model of TENAX. 
 
         Parameters
         ----------
-        data_oe_prec (np.ndarray):  Array of precipitation ordinary events data.
-        data_oe_temp (np.ndarray): Array of temperature ordinary events data.
-        thr (np.float64): Magnitude of precipitation threshold.
+        data_oe_prec : numpy.ndarray
+            Array of precipitation ordinary events data.
+        data_oe_temp : numpy.ndarray
+            Array of temperature ordinary events data.
+        thr : numpy.float64
+            Magnitude of precipitation threshold.
+        b_set : NoneType or float
+            Set value of b. fits magnitude model with a specified value for b.
+        b_exp : bool
+            If True, uses the exponential rather than linear fit for b.
+
 
         Returns
         -------
@@ -534,70 +542,114 @@ class TENAX:
             Log likelihood of null hypothesis.
 
         """
-        # alpha=0 --> dependence of shape on T is always allowed
-        # alpha=1 --> dependence of shape on T is never allowed
+        # alpha=0 --> dependence of shape on T is always allowed 
+        # alpha=1 --> dependence of shape on T is never allowed 
         # else    --> dependence of shape on T depends on stat. significance
-
+        
         P = data_oe_prec
         T = data_oe_temp
         thr = thr
         init_g = self.init_param_guess
         alpha = self.alpha
-
-        if b_set:
-            min_phat_bset = minimize(
-                lambda theta: -wbl_leftcensor_loglik_bset(theta, P, T, thr, b_set),
-                init_g,
-                method="Nelder-Mead",
-            )
-            phat_bset = min_phat_bset.x
-            loglik_bset = wbl_leftcensor_loglik_bset(phat_bset, P, T, thr, b_set)
-            phat_bset[1] = b_set
-            phat = phat_bset
-            loglik = loglik_bset
-            loglik_H1, loglik_H0shape = (
-                None,
-                None,
-            )  # TODO: figure this out, do we need these outputs?
-
-        else:
-            min_phat_H1 = minimize(
-                lambda theta: -wbl_leftcensor_loglik(theta, P, T, thr),
-                init_g,
-                method="Nelder-Mead",
-            )
+        
+        if b_set: 
+            if b_exp:
+                min_phat_bset = minimize(lambda theta: -wbl_leftcensor_loglik_bset_bexp(theta, P, T, thr,b_set), 
+                                       init_g, 
+                                       method='Nelder-Mead')
+                phat_bset = min_phat_bset.x
+                loglik_bset = wbl_leftcensor_loglik_bset_bexp(phat_bset,P,T,thr,b_set)
+                phat_bset[1] = b_set
+                phat = phat_bset
+                loglik = loglik_bset
+                loglik_H1, loglik_H0shape = None, None #TODO: figure this out, do we need these outputs?
+            else:
+                min_phat_bset = minimize(lambda theta: -wbl_leftcensor_loglik_bset(theta, P, T, thr,b_set), 
+                                       init_g, 
+                                       method='Nelder-Mead')
+                phat_bset = min_phat_bset.x
+                loglik_bset = wbl_leftcensor_loglik_bset(phat_bset,P,T,thr,b_set)
+                phat_bset[1] = b_set
+                phat = phat_bset
+                loglik = loglik_bset
+                loglik_H1, loglik_H0shape = None, None #TODO: figure this out, do we need these outputs?
+            
+        elif b_exp:
+            
+            min_phat_H1 = minimize(lambda theta: -wbl_leftcensor_loglik_exp(theta, P, T, thr), 
+                                   init_g, 
+                                   method='Nelder-Mead')
             phat_H1 = min_phat_H1.x
 
-            min_phat_H0shape = minimize(
-                lambda theta: -wbl_leftcensor_loglik_H0shape(theta, P, T, thr),
-                init_g,
-                method="Nelder-Mead",
-                options={"xatol": 1e-8, "fatol": 1e-8, "maxiter": 1000},
-            )
 
+            
+            min_phat_H0shape = minimize(lambda theta: -wbl_leftcensor_loglik_H0shape(theta, P, T, thr), 
+                                   init_g, 
+                                   method='Nelder-Mead',
+                                   options={'xatol': 1e-8, 'fatol': 1e-8, 'maxiter': 1000})
+            
             phat_H0shape = min_phat_H0shape.x
             phat_H0shape[1] = 0
-
-            loglik_H1 = wbl_leftcensor_loglik(phat_H1, P, T, thr)
-            loglik_H0shape = wbl_leftcensor_loglik_H0shape(phat_H0shape, P, T, thr)
-            lambda_LR_shape = -2 * (loglik_H0shape - loglik_H1)
+            
+            loglik_H1 = wbl_leftcensor_loglik_exp(phat_H1,P,T,thr)
+            loglik_H0shape = wbl_leftcensor_loglik_H0shape(phat_H0shape,P,T,thr)
+            lambda_LR_shape = -2*( loglik_H0shape - loglik_H1 )
             pval = chi2.sf(lambda_LR_shape, df=1)
-
-            if alpha == 0:  # dependence of shape on T is always allowed
-                phat = phat_H1
-                loglik = loglik_H1
-            elif alpha == 1:  # dependence of shape on T is never allowed
-                phat = phat_H0shape
-                loglik = loglik_H0shape
-            elif pval <= alpha:  # depends on stat. significance
-                phat = phat_H1
-                loglik = loglik_H1
+            
+            
+            if alpha==0 : # dependence of shape on T is always allowed 
+                phat = phat_H1;
+                loglik = loglik_H1;
+            elif alpha==1 : # dependence of shape on T is never allowed 
+                phat = phat_H0shape;
+                loglik = loglik_H0shape;
+            elif pval<=alpha : # depends on stat. significance
+                phat = phat_H1;
+                loglik = loglik_H1;
             else:
-                phat = phat_H0shape
-                loglik = loglik_H0shape
+                phat = phat_H0shape;
+                loglik = loglik_H0shape;
+            
 
+
+
+        else:
+            min_phat_H1 = minimize(lambda theta: -wbl_leftcensor_loglik(theta, P, T, thr), 
+                                   init_g, 
+                                   method='Nelder-Mead')
+            phat_H1 = min_phat_H1.x
+
+
+            
+            min_phat_H0shape = minimize(lambda theta: -wbl_leftcensor_loglik_H0shape(theta, P, T, thr), 
+                                   init_g, 
+                                   method='Nelder-Mead',
+                                   options={'xatol': 1e-8, 'fatol': 1e-8, 'maxiter': 1000})
+            
+            phat_H0shape = min_phat_H0shape.x
+            phat_H0shape[1] = 0
+            
+            loglik_H1 = wbl_leftcensor_loglik(phat_H1,P,T,thr)
+            loglik_H0shape = wbl_leftcensor_loglik_H0shape(phat_H0shape,P,T,thr)
+            lambda_LR_shape = -2*( loglik_H0shape - loglik_H1 )
+            pval = chi2.sf(lambda_LR_shape, df=1)
+            
+            
+            if alpha==0 : # dependence of shape on T is always allowed 
+                phat = phat_H1;
+                loglik = loglik_H1;
+            elif alpha==1 : # dependence of shape on T is never allowed 
+                phat = phat_H0shape;
+                loglik = loglik_H0shape;
+            elif pval<=alpha : # depends on stat. significance
+                phat = phat_H1;
+                loglik = loglik_H1;
+            else:
+                phat = phat_H0shape;
+                loglik = loglik_H0shape;
+                
         return phat, loglik, loglik_H1, loglik_H0shape
-
+    
     def temperature_model(self, data_oe_temp, beta=0, method="norm"):
         """
         Fits the temperature data to the TENAX temperature model.
@@ -670,6 +722,7 @@ class TENAX:
         gen_RL=True,
         temp_method="norm",
         method_root_scalar="brentq",
+        b_exp = False
     ):
         """
         Inversion of the TENAX model to predict return levels or plot model.
@@ -692,6 +745,8 @@ class TENAX:
             Type of fit used for the temperature model. The default is "norm".
         method_root_scalar : str, optional
             method used for inversion. The default is "brentq".
+        b_exp : bool
+            If True, uses the exponential rather than linear fit for b.
 
         Returns
         -------
@@ -720,10 +775,17 @@ class TENAX:
         T_mc = randdf(self.n_monte_carlo, df, "pdf").T
 
         # Generates random P according to the magnitude model
-        wbl_phat = np.column_stack(
-            (F_phat[2] * np.exp(F_phat[3] * T_mc), F_phat[0] + F_phat[1] * T_mc)
-        )
+        if b_exp:
+            wbl_phat = np.column_stack((
+                                        F_phat[2] * np.exp(F_phat[3] * T_mc),
+                                        F_phat[0] * np.exp(F_phat[1] * T_mc)
+                                        )) #exponential model for b
 
+        else:
+            wbl_phat = np.column_stack((
+                                        F_phat[2] * np.exp(F_phat[3] * T_mc),
+                                        F_phat[0] + F_phat[1] * T_mc
+                                        )) #linear model for b
         # old vguess
         # vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05
         # test new vguess
@@ -1017,6 +1079,105 @@ def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
 
     return loglik
 
+def wbl_leftcensor_loglik_exp(theta, x, t, thr):
+    """
+    TODO: I dont understand these things
+
+    Parameters
+    ----------
+    theta : float
+        initial guess for fit.
+    x : numpy.ndarray
+        precipitation values.
+    t : numpy.ndarray
+        temperature values.
+    thr : float
+        threshold value for left-censoring.
+
+    Returns
+    -------
+    loglik : TYPE
+        DESCRIPTION.
+
+    """
+    #theta is init guess
+    # x is precipitaon\
+    # t is temperature
+    # thr is threshold value (exact, no percentual)
+    a_w = theta[0]
+    b_w = theta[1]
+    a_C = theta[2]
+    b_C = theta[3]
+
+    # Apply conditions based on the threshold
+    t0 = t[x < thr]
+    shapes0 = a_w * np.exp(b_w * t0)
+    scales0 = a_C * np.exp(b_C * t0)
+    
+    x1 = x[x >= thr]
+    t1 = t[x >= thr]
+    shapes1 = a_w * np.exp(b_w * t1)
+    scales1 = a_C * np.exp(b_C * t1)
+
+    # Calculate the log-likelihood components
+    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
+    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
+
+    # Sum the components for the final log-likelihood
+    loglik = loglik1 + loglik2
+
+    return loglik
+
+
+def wbl_leftcensor_loglik_bset_bexp(theta, x, t, thr, b_set):
+    """
+    TODO: I dont understand these things
+
+    Parameters
+    ----------
+    theta : float
+        initial guess for fit.
+    x : numpy.ndarray
+        precipitation values.
+    t : numpy.ndarray
+        temperature values.
+    thr : float
+        threshold value for left-censoring.
+
+    Returns
+    -------
+    loglik : TYPE
+        DESCRIPTION.
+
+    """
+    #theta is init guess
+    # x is precipitaon\
+    # t is temperature
+    # thr is threshold value (exact, no percentual)
+    a_w = theta[0]
+    b_w = b_set
+    a_C = theta[2]
+    b_C = theta[3]
+
+    # Apply conditions based on the threshold
+    t0 = t[x < thr]
+    shapes0 = a_w * np.exp(b_w * t0)
+    scales0 = a_C * np.exp(b_C * t0)
+    
+    x1 = x[x >= thr]
+    t1 = t[x >= thr]
+    shapes1 = a_w * np.exp(b_w * t1)
+    scales1 = a_C * np.exp(b_C * t1)
+
+    # Calculate the log-likelihood components
+    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
+    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
+
+    # Sum the components for the final log-likelihood
+    loglik = loglik1 + loglik2
+
+    return loglik
+
 
 def gen_norm_pdf(x: np.ndarray, mu: float, sigma: float, beta: float) -> np.ndarray:
     """
@@ -1218,7 +1379,7 @@ def SMEV_Mc_inversion(
     return qnt
 
 
-def inverse_magnitude_model(F_phat, eT, qs):
+def inverse_magnitude_model(F_phat, eT, qs, b_exp=False):
     """
     Calculate percentiles from the Weibell magnitude model
 
@@ -1230,6 +1391,8 @@ def inverse_magnitude_model(F_phat, eT, qs):
         x (temperature) values from which to produce distribution.
     qs : list
         list of percentiles to calculate (between 0 and 1). e.g. [0.85,0.95,0.99].
+    b_exp : bool
+        If True, uses the exponential rather than linear fit for b.
 
     Returns
     -------
@@ -1239,13 +1402,15 @@ def inverse_magnitude_model(F_phat, eT, qs):
     """
 
     percentile_lines = np.zeros((len(qs), len(eT)))
-    for iq, q in enumerate(qs):
-        percentile_lines[iq, :] = (
-            F_phat[2]
-            * np.exp(F_phat[3] * eT)
-            * (-np.log(1 - q)) ** (1 / (F_phat[0] + F_phat[1] * eT))
-        )
+    if b_exp:
+        for iq, q in enumerate(qs):
+            percentile_lines[iq,:] = F_phat[2]*np.exp(F_phat[3] * eT)*(-np.log(1-q))**(1/(F_phat[0]*np.exp(F_phat[1]*eT)))
+    else:
+        for iq, q in enumerate(qs):
+            percentile_lines[iq, :] = (
+                F_phat[2]
+                * np.exp(F_phat[3] * eT)
+                * (-np.log(1 - q)) ** (1 / (F_phat[0] + F_phat[1] * eT))
+            )
 
     return percentile_lines
-
-

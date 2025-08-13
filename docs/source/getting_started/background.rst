@@ -114,6 +114,13 @@ Although this dependence is less certain and can be masked by estimation uncerta
 
    \kappa(T) = \kappa_0 + bT \tag{5}
 
+Some research also suggests that an **exponential form** may be more appropriate, which we are testing currently:
+
+.. math::
+
+   \kappa(T) = \kappa_0 \cdot a^{bT} \tag{6}
+
+
 Model parameters are estimated using **maximum likelihood**, with observations **left-censored** below a defined threshold :math:`\vartheta^*`.
 
 .. image:: img/fig_magnitude.jpg
@@ -131,7 +138,7 @@ The probability density function (PDF) is given by:
 
 .. math::
 
-    g(T) = \frac{\beta}{2 \sigma \Gamma\left(\frac{1}{\beta}\right)} \exp \left[ - \left( \frac{T - \mu}{\sigma} \right)^{\beta} \right] \tag{6}
+    g(T) = \frac{\beta}{2 \sigma \Gamma\left(\frac{1}{\beta}\right)} \exp \left[ - \left( \frac{T - \mu}{\sigma} \right)^{\beta} \right] \tag{7}
 
 where *μ* and *σ* are the location and scale parameters, respectively. 
 These parameters can be estimated using the **maximum likelihood method**.
@@ -153,7 +160,7 @@ The distribution of annual maxima is estimated using:
 
 .. math::
 
-   G_{\text{TENAX}}(x) = \int_D W(x; T) \cdot g(T) \, dT  \approx \left( \frac{1}{N} \sum_{i=1}^{N} W(x; T_i) \right)^n \tag{7}
+   G_{\text{TENAX}}(x) = \int_D W(x; T) \cdot g(T) \, dT  \approx \left( \frac{1}{N} \sum_{i=1}^{N} W(x; T_i) \right)^n \tag{8}
 
 | where:
 | - :math:`N` is the number of simulated events (e.g., :math:`2 \cdot 10^4`),
