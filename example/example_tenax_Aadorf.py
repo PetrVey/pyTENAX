@@ -1,4 +1,4 @@
-from importlib_resources import files
+from importlib.resources import files
 import numpy as np
 import pandas as pd
 import time
