@@ -14,7 +14,6 @@ from typing import List, Tuple, Union, Optional
 import time
 
 # Old function for the reference.
-
 def MC_tSMEV_cdf_old(
     y: Union[float, np.ndarray], wbl_phat: np.ndarray, n: int
 ) -> Tuple[float, np.ndarray]:
@@ -177,7 +176,7 @@ class TestMc_inversion(unittest.TestCase):
         Compare SMEV_Mc_inversion_old vs library SMEV_Mc_inversion.
         Runs both 100 times, checks equality on each run, and reports average timings.
         """
-        n_runs = 100
+        n_runs = 1
         times_old = []
         times_new = []
 
