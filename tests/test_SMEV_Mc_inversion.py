@@ -13,6 +13,7 @@ from scipy.optimize import root_scalar
 from typing import List, Tuple, Union, Optional
 import time
 
+
 # Old function for the reference.
 def MC_tSMEV_cdf_old(
     y: Union[float, np.ndarray], wbl_phat: np.ndarray, n: int
