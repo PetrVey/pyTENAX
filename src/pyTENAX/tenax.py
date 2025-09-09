@@ -1291,63 +1291,60 @@ def randdf(size, df, flag):
 
     return result.reshape((n, m))
 
-
-def MC_tSMEV_cdf(
-    y: Union[float, np.ndarray], wbl_phat: np.ndarray, n: int
-) -> Tuple[float, np.ndarray]:
+def MC_tSMEV_cdf(y, wbl_phat, n):
     """
-    Calculate the cumulative distribution function (CDF) based on the given Weibull parameters.
-
-    Parameters
-    ----------
-        y (Union[float, np.ndarray]): Value(s) at which to evaluate the CDF.
-        wbl_phat (np.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
-        n (int): Power to raise the final probability to.
-
-    Returns
-    -------
-        Tuple[float, np.ndarray]: Calculated CDF value(s).
+    Vectorized version of the Monte Carlo SMEV CDF evaluation.
+    
+    Parameters:
+    y (float or array-like): Value(s) at which to evaluate the CDF.
+    wbl_phat (numpy.ndarray): Array of Weibull parameters (N x 2) for [scale, shape].
+    n (float): Power to raise the average probability.
+    
+    Returns:
+    float or ndarray: CDF value(s) for input y.
     """
-    p = 0
-    for i in range(wbl_phat.shape[0]):
-        p += 1 - np.exp(-((y / wbl_phat[i, 0]) ** wbl_phat[i, 1]))
-    p = (p / wbl_phat.shape[0]) ** n
-    return p
+    y = np.atleast_1d(y)  # Ensure y is array
+    scale = wbl_phat[:, 0]
+    shape = wbl_phat[:, 1]
+
+    # Reshape to broadcast over y and MC samples
+    y_grid = y[:, None]        # shape: (len(y), 1)
+    scale_grid = scale[None, :]  # shape: (1, N)
+    shape_grid = shape[None, :]  # shape: (1, N)
+
+    cdf_vals = 1 - np.exp(-(y_grid / scale_grid) ** shape_grid)
+    p_avg = np.mean(cdf_vals, axis=1)  # Average over MC samples
+
+    return p_avg ** n
 
 
-def SMEV_Mc_inversion(
-    wbl_phat: np.ndarray,
-    n: Union[int, float, pd.Series],
-    target_return_periods: Union[list, np.ndarray],
-    vguess: np.ndarray,
-    method_root_scalar: Union[str, None],
-) -> np.ndarray:
+def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess, method_root_scalar):
     """
     Invert to find quantiles corresponding to the target return periods.
-
-    Parameters
-    ----------
-        wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
-        n (int): Power to raise the final probability to.
-        target_return_periods (list or array-like): Desired target return periods.
-        vguess (numpy.ndarray): Initial guesses for inversion.
-
-    Returns
-    -------
-        np.ndarray: Quantiles corresponding to the target return periods.
+    
+    Parameters:
+    wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
+    n (int): Power to raise the final probability to.
+    target_return_periods (list or array-like): Desired target return periods.
+    vguess (numpy.ndarray): Initial guesses for inversion.
+    
+    Returns:
+    numpy.ndarray: Quantiles corresponding to the target return periods.
     """
-    if isinstance(n, pd.Series):
-        n = float(n.values[0])
-
+    if not isinstance(n, float): #if n is numpy or panda series, this should give u just float
+        n = float(n.values[0]) 
+    else:
+        pass
+    
     pr = 1 - 1 / np.array(
         target_return_periods
-    )  # Probabilities associated with target_return_periods
+        )  # Probabilities associated with target_return_periods
     pv = MC_tSMEV_cdf(
         vguess, wbl_phat, n
-    )  # Probabilities associated with vguess values
+        )       # Probabilities associated with vguess values
     qnt = np.full(
         len(target_return_periods), np.nan
-    )  # Initialize output array with NaNs
+        )  # Initialize output array with NaNs
 
     for t in range(len(target_return_periods)):
         # Find the first guess where pv exceeds pr
@@ -1357,26 +1354,23 @@ def SMEV_Mc_inversion(
         else:
             # Use the last valid guess if none exceeds pr
             last_valid_idx = np.where(pv < 1)[0]
-            first_guess = (
-                vguess[last_valid_idx[-1]] if len(last_valid_idx) > 0 else vguess[-1]
-            )
+            first_guess = vguess[last_valid_idx[-1]] if len(last_valid_idx) > 0 else vguess[-1]
 
         # Define the function for root finding
         def func(y):
             return MC_tSMEV_cdf(y, wbl_phat, n) - pr[t]
 
         # Use root_scalar as an alternative to MATLAB's fzero
-        result = root_scalar(
-            func,
-            bracket=[vguess[0], vguess[-1]],
-            x0=first_guess,
-            method=method_root_scalar,
-        )
+        result = root_scalar(func, 
+                             bracket=[vguess[0], vguess[-1]], 
+                             x0=first_guess,
+                             method=method_root_scalar)
 
         if result.converged:
             qnt[t] = result.root
 
     return qnt
+
 
 
 def inverse_magnitude_model(F_phat, eT, qs, b_exp=False):
