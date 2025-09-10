@@ -13,6 +13,7 @@ import statsmodels.api as sm
 from typing import List, Tuple, Union, Optional
 import os
 import matplotlib.pyplot as plt
+from pyTENAX import smev
 
 #subgraph Core_Process["Monte_Carlo Hypothesis Test weibull tail test"]
 #    A[Monte_Carlo] --> B[estimate_smev_param_without_AM]
@@ -21,94 +22,6 @@ import matplotlib.pyplot as plt
 #    A --> E[find_optimal_threshold]
 #    A -->|optional| F[plot_curve]
 #end
-
-def estimate_smev_parameters(ordinary_events_df: pd.DataFrame, 
-                           pr_field: str, 
-                           data_portion: List[float]) -> List[float]:
-    '''--------------------------------------------------------------------------
-    Function that estimates parameters of the Weibull distribution
-    
-    Parameters
-    ----------
-    ordinary_events_df : pd.DataFrame
-        Pandas dataframe of the ordinary events - without zeros!!!
-    pr_field : str
-        The name of the df column with precipitation values.
-    data_portion : List[float]
-        2-elements list with the limits in probability of the data to be used for the parameters estimation
-        e.g. data_portion = [0.75, 1] uses the largest 25% values in data 
-    
-    Returns
-    -------
-    List[float]
-        [shape, scale] parameters of the Weibull distribution
-    -----------------------------------------------------------------------------'''
-    sorted_df = np.sort(ordinary_events_df[pr_field].values)
-    ECDF = (np.arange(1, 1 + len(sorted_df)) / (1 + len(sorted_df)))
-    fidx = max(1, math.floor((len(sorted_df)) * data_portion[0]))  
-    tidx = math.ceil(len(sorted_df) * data_portion[1])  
-    to_use = np.arange(fidx - 1, tidx)  
-    to_use_array = sorted_df[to_use]
-
-    X = (np.log(np.log(1 / (1 - ECDF[to_use]))))  
-    Y = (np.log(to_use_array))  
-    X = sm.add_constant(X)  
-    model = sm.OLS(Y, X)
-    results = model.fit()
-    param = results.params
-
-    slope = param[1]
-    intercept = param[0]
-
-    shape = 1 / slope
-    scale = np.exp(intercept)
-
-    weibull_param = [shape, scale]
-
-    return weibull_param
-
-def smev_return_values(return_period, shape, scale, n):
-    '''--------------------------------------------------------------------------
-    Function that calculates return values according to parameters of the Weibull distribution
-    
-    arguments:
-    - return_period (int): The desired return period for which intensity is calculated.
-    - shape (float): Weibull distribution shape parameter
-    - scale (float): Weibull distribution scale parameter
-    - n (float): Mean number of ordinary events per year 
-    
-    returns:
-    - intensity (float): The corresponding intensity value. 
-    -----------------------------------------------------------------------------'''
-    return_period = np.asarray(return_period)
-    quantile = (1 - (1 / return_period))
-    if shape == 0 or n == 0:
-        intensity = 0
-    else:
-        intensity = scale * ((-1) * (np.log(1 - quantile ** (1 / n)))) ** (1 / shape)
-
-    return intensity
-
-def get_ordinary_events(data_df, zero, pr_field, hydro_year_field):
-    '''--------------------------------------------------------------------------
-    Function that extracts ordinary precipitation events out of the entire data.
-    
-    Parameters:
-    - data_df (dataframe): df with 2 columns - precipitation values, hydrological year values
-    - zero (float): The threshold value for precipitation amount.
-                    Days with precipitation amounts above this threshold are considered as ordinary events.
-    - pr_field (string): The name of the df column with precipitation values.
-    - hydro_year_field (string): The name of the df column with hydrological years values.
-    
-    Returns:
-    - ordinary_events_df (dataframe): Two columns df of ordinary events, and their corresponding hydrological year. 
-    -----------------------------------------------------------------------------'''
-    
-    data_df = data_df.dropna()
-    ordinary_events_df = data_df.loc[data_df[pr_field]>zero]
-    
-    return ordinary_events_df
-
 
 def estimate_smev_param_without_AM(ordinary_events_df, pr_field, record_size, censor_value, annual_max_indexes):
     '''--------------------------------------------------------------------------
