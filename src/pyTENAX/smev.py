@@ -253,12 +253,12 @@ class SMEV:
         return arr_vals, arr_dates, n_ordinary_per_year, n_ordinary
 
     def estimate_smev_parameters(
-        self, ordinary_events_df: pd.DataFrame, data_portion: list[Tuple[int, float]]
+        self, ordinary_events: Union[np.ndarray, pd.Series, list], data_portion: list[Tuple[int, float]]
     ) -> list[float]:
         """Function that estimates shape and scale parameters of the Weibull distribution.
 
         Args:
-            ordinary_events_df (pd.DataFrame): Dataframe with values of ordinary events.
+            ordinary_events (pd.DataFrame): Dataframe with values of ordinary events.
             data_portion (list): Lower and upper limits of the probabilities of data \
                 to be used for the parameters estimation.
 
@@ -266,7 +266,7 @@ class SMEV:
             list[float]: Shape and scale parameters of the Weibull distribution.
         """
 
-        sorted_df = np.sort(ordinary_events_df)
+        sorted_df = np.sort(ordinary_events)
         ECDF = np.arange(1, 1 + len(sorted_df)) / (1 + len(sorted_df))
         fidx = max(1, math.floor((len(sorted_df)) * data_portion[0]))
         tidx = math.ceil(len(sorted_df) * data_portion[1])

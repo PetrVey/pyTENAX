@@ -164,9 +164,9 @@ def create_synthetic_records(seed_random: int,
     Parameters
     ----------
     seed_random : int
-        Value that determines the starting point for the pseudorandom number generator
+        Value that determines the starting point for the pseudorandom number generator => due to reproducibility
     synthetic_records_amount : int
-        Value that determines how many synthetic records to generate
+        Value that determines how many synthetic records to generate => number of stochastic realizations
     record_size : int
         The number of ordinary events in the record
     shape : float
@@ -373,9 +373,9 @@ def Monte_Carlo(ordinary_events_df: pd.DataFrame,
     hydro_year_field : str
         The name of the column with the hydrological-years / blocks values
     seed_random : int
-        Value that determines the starting point for the pseudorandom number generator
+        Value that determines the starting point for the pseudorandom number generator => due to reproducibility
     synthetic_records_amount : int
-        Value that determines how many synthetic records to generate
+        Value that determines how many synthetic records to generate. => number of stochastic realizations
     p_confidence : float
         Probability to be used for the test. confidence interval = 1-p_confidence
     make_plot : bool
