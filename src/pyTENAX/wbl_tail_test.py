@@ -23,26 +23,29 @@ from pyTENAX import smev
 #    A -->|optional| F[plot_curve]
 #end
 
-def estimate_smev_param_without_AM(ordinary_events_df, pr_field, record_size, censor_value, annual_max_indexes):
+def estimate_smev_param_without_AM(ordinary_events: Union[np.ndarray, pd.Series, list], 
+                                   censor_value, annual_max_indexes):
     '''--------------------------------------------------------------------------
     Function that estimates parameters of the Weibull distribution, excluding annual maxima (block maxima) values. 
     
     Arguments:
-    - ordinary_events_df (dataframe): pandas dataframe of the ordinary events - withot zeros!!!
-    - pr_field (str): The name of the column with the precipitation values 
-    - record_size (int): The number of ordinary events in the record
+    - ordinary_events ([np.ndarray, pd.Series, list): values of ordinary events - without zeros!!!
     - censor_value (float): The threshold for left censoring the record
-    - annual_max_indexes (list): List of indexes in the record of the annual/block maxima
+    - annual_max_indexes (list): List of indexes in the record of the annual/block maxima, COMING ALREADY FROM SORTED ARRAY!
     
     Returns:
     - shape, scale (floats): Weibull distribution parameters 
     -----------------------------------------------------------------------------'''
-    sorted_df = np.sort(ordinary_events_df[pr_field].values)
+    
+    sorted_df = np.sort(ordinary_events)
+    record_size = len(sorted_df) #The number of ordinary events in the record
     ECDF = (np.arange(1, 1 + record_size) / (1 + record_size))
     data_portion=[censor_value,1]
+    #fidx: first index of data to keep
     fidx = max(1, math.floor(record_size * data_portion[0]))  
+    #tidx: last index of data to keep
     tidx = math.ceil(record_size * data_portion[1])  
-    to_use = np.arange(fidx - 1, tidx)
+    to_use = np.arange(fidx - 1, tidx) # Create an array of indices from fidx-1 up to tidx-1 (inclusive)
     to_use_without_am = [index for index in to_use if index not in annual_max_indexes]
     events_without_am = sorted_df[to_use_without_am]
 
@@ -307,8 +310,9 @@ def Monte_Carlo(ordinary_events_df: pd.DataFrame,
     ordinary_events_df = ordinary_events_df.sort_values(by=pr_field) 
     ordinary_events_df = ordinary_events_df.reset_index(drop=True)
     annual_max = sorted(list(ordinary_events_df.groupby(hydro_year_field)[pr_field].max().values))
-    annual_max_indexes = sorted(list(ordinary_events_df.groupby(hydro_year_field)[pr_field].idxmax().values))
-
+    #This can be a problemn, as it is from sort array and then in estimate_smev_param_without_AM, 
+    #we cann it again from sorted ones, it is a bit tricky part
+    annual_max_indexes = sorted(list(ordinary_events_df.groupby(hydro_year_field)[pr_field].idxmax().values)) 
     record_size = len(ordinary_events_df)
     p_out_dicts_lst = []
     
@@ -348,32 +352,23 @@ def Monte_Carlo(ordinary_events_df: pd.DataFrame,
     
     return optimal_threshold
 
-
+# Test for Weibull where tail can be described from weibull distribution
 # Set random seed for reproducibility
 np.random.seed(42)
-
 # Number of samples
 n_samples = 500
-
 # Generate 'year': random integers between 2000 and 2025
 years = np.random.randint(2000, 2026, size=n_samples)
-
 # Generate 'pr': Weibull-distributed values scaled to 0–800
 shape = 2.0   # Weibull shape parameter
 scale = 300.0  # Weibull scale parameter
 pr_values = scale * np.random.weibull(shape, size=n_samples)
 pr_values = np.clip(pr_values, 0, 800)
-
 # Create DataFrame
 df_example = pd.DataFrame({
     'year': years,
     'pr': pr_values
 })
-
-print(df_example.head())
-
-########################################################################
-
 
 optimal_threshold = Monte_Carlo(ordinary_events_df=df_example,
                                 pr_field='pr',
@@ -383,30 +378,21 @@ optimal_threshold = Monte_Carlo(ordinary_events_df=df_example,
                                 p_confidence=0.1,
                                 make_plot=True)
 
-
+############################################################################
+# Test for Weibull where tail can NOT be described from weibull distribution
 # Set random seed for reproducibility
 np.random.seed(42)
-
 # Number of samples
 n_samples = 500
-
 # Generate 'year': random integers between 2000 and 2025
 years = np.random.randint(2000, 2026, size=n_samples)
-
 pr_values = np.random.uniform(0, 800, size=n_samples)
-
 
 # Create DataFrame
 df_example = pd.DataFrame({
     'year': years,
     'pr': pr_values
 })
-
-print(df_example.head())
-
-########################################################################
-
-
 Monte_Carlo(ordinary_events_df=df_example,
                 pr_field='pr',
                 hydro_year_field='year',
@@ -414,3 +400,4 @@ Monte_Carlo(ordinary_events_df=df_example,
                 synthetic_records_amount=10,
                 p_confidence=0.1,
                 make_plot=True)
+

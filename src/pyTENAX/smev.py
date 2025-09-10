@@ -258,7 +258,7 @@ class SMEV:
         """Function that estimates shape and scale parameters of the Weibull distribution.
 
         Args:
-            ordinary_events (pd.DataFrame): Dataframe with values of ordinary events.
+            ordinary_events ([np.ndarray, pd.Series, list): values of ordinary events.
             data_portion (list): Lower and upper limits of the probabilities of data \
                 to be used for the parameters estimation.
 
@@ -268,9 +268,13 @@ class SMEV:
 
         sorted_df = np.sort(ordinary_events)
         ECDF = np.arange(1, 1 + len(sorted_df)) / (1 + len(sorted_df))
-        fidx = max(1, math.floor((len(sorted_df)) * data_portion[0]))
+        #fidx: first index of data to keep
+        fidx = max(1, math.floor((len(sorted_df)) * data_portion[0])) 
+        #tidx: last index of data to keep
         tidx = math.ceil(len(sorted_df) * data_portion[1])
+        # Create an array of indices from fidx-1 up to tidx-1 (inclusive)
         to_use = np.arange(fidx - 1, tidx)
+        # Select only the subset of sorted values corresponding to the chosen quantile range
         to_use_array = sorted_df[to_use]
 
         X = np.log(np.log(1 / (1 - ECDF[to_use])))
