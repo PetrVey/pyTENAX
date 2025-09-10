@@ -2,7 +2,9 @@
 """
 Created on Wed Sep 10 15:53:57 2025
 
-@author: Petr
+@author1: Yaniv yaniv.goldschmidt@unipd.it
+@author2: PetrVey
+
 """
 import math
 import numpy as np
@@ -11,6 +13,14 @@ import statsmodels.api as sm
 from typing import List, Tuple, Union, Optional
 import os
 import matplotlib.pyplot as plt
+
+#subgraph Core_Process["Monte_Carlo Hypothesis Test weibull tail test"]
+#    A[Monte_Carlo] --> B[estimate_smev_param_without_AM]
+#    A --> C[create_synthetic_records]
+#    A --> D[check_confidence_interval]
+#    A --> E[find_optimal_threshold]
+#    A -->|optional| F[plot_curve]
+#end
 
 def estimate_smev_parameters(ordinary_events_df: pd.DataFrame, 
                            pr_field: str, 
