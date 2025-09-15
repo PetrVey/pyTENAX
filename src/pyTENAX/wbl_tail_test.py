@@ -103,10 +103,13 @@ def create_synthetic_records(seed_random: int,
     random_array = rng.uniform(0, 1, synthetic_records_amount * record_size) 
 
     # Calculate quantiles & create records matrix
-    random_ordinary_events = []  
-    for p in random_array:
-        intensity = scale * ((-1) * (np.log(1 - p))) ** (1 / shape) 
-        random_ordinary_events.append(intensity)
+    random_ordinary_events = scale * ((-1) * np.log(1 - random_array)) ** (1 / shape)
+    
+    #old
+    #random_ordinary_events = []  
+    #for p in random_array:
+    #    intensity = scale * ((-1) * (np.log(1 - p))) ** (1 / shape) 
+    #    random_ordinary_events.append(intensity)
 
     records_matrix = np.array(random_ordinary_events).reshape(synthetic_records_amount, record_size)
     records_matrix = np.sort(records_matrix, axis=1)  # sort each row
@@ -176,7 +179,7 @@ def find_optimal_threshold(p_out_dicts_lst, p_confidence):
     
     Returns:
     - optimal_threshold (float): The minimal threshold from which p_out <= p_confidence for all bigger thresholds.
-                                 If all threshold rejected - it will return 0.95. If not all thresholds rejected,
+                                 If all threshold rejected - it will return 9999. If not all thresholds rejected,
                                  (1-optimal_threshold) is the portion of the record that can be assumed to be 
                                  distributed Weibull.
       
@@ -195,7 +198,7 @@ def find_optimal_threshold(p_out_dicts_lst, p_confidence):
     
     if len(indexes_rejected)>0 : 
         if len(indexes_rejected)==len(thresholds_lst): 
-            optimal_threshold = 0.95 
+            optimal_threshold = 1
             #All thresholds rejected    
         else:
             #some thresholds rejected and some not
@@ -204,7 +207,7 @@ def find_optimal_threshold(p_out_dicts_lst, p_confidence):
             if index_to_use<len(thresholds_lst):
                 optimal_threshold = thresholds_lst[index_to_use]
             else:
-                optimal_threshold = 0.95
+                optimal_threshold = 1
 
     else:
         optimal_threshold = thresholds_lst[0] 
@@ -259,14 +262,12 @@ def plot_curve(p_out_dicts_lst, p_confidence, optimal_threshold):
     # Place legend inside the plot at top right
     plt.legend(loc='upper right')
     
-    plot_filename = 'monte_carlo_plot.png'
-    
     # Save the plot with tight layout to prevent legend cutoff
     plt.tight_layout()
     plt.show()
 
 
-def Monte_Carlo(ordinary_events_df: pd.DataFrame,
+def weibul_test_MC(ordinary_events_df: pd.DataFrame,
                 pr_field: str,
                 hydro_year_field: str,
                 seed_random: int,
@@ -277,7 +278,7 @@ def Monte_Carlo(ordinary_events_df: pd.DataFrame,
     '''--------------------------------------------------------------------------
     Function that tests the hypothesis that block maxima are samples from a parent distribution with Weibull tail.
     The tail is defined by a given left censoring threshold. 
-    This function will return the optimal left censoring threshold. If all threshold rejected - it will return 0.95.
+    This function will return the optimal left censoring threshold. If all threshold rejected - it will return 1.
     If not all thresholds rejected, (1-optimal_threshold) is the portion of the record that can be assumed to be
     distributed Weibull.
     
@@ -297,26 +298,24 @@ def Monte_Carlo(ordinary_events_df: pd.DataFrame,
         Probability to be used for the test. confidence interval = 1-p_confidence
     make_plot : bool
         Choose whether or not to include the plot
-    csv_filename : str, optional
-        Name of the input CSV file to use for the output plot name
-    
+
     Returns
     -------
     Union[float, int]
-        The optimal left censoring threshold, or 999999 if there is a problem with Weibull parameters fit
+        The optimal left censoring threshold, or 1 if all rejected, or 1111 if there is a problem with Weibull parameters fit
     -----------------------------------------------------------------------------'''
     
-    censor_values = np.arange(0, 1, 0.05)
+    censor_values = np.arange(0, 1, 0.05) #not quite convinced to hard code this. 
     
     ordinary_events_df = ordinary_events_df.sort_values(by=pr_field) 
     ordinary_events_df = ordinary_events_df.reset_index(drop=True)
     annual_max = sorted(list(ordinary_events_df.groupby(hydro_year_field)[pr_field].max().values))
-    #This can be a problemn, as it is from sort array and then in estimate_smev_param_without_AM, 
-    #we cann it again from sorted ones, it is a bit tricky part
     annual_max_indexes = sorted(list(ordinary_events_df.groupby(hydro_year_field)[pr_field].idxmax().values)) 
     record_size = len(ordinary_events_df)
     p_out_dicts_lst = []
     ordinary_events = ordinary_events_df[pr_field]
+    
+    shape_scale_dict = {}
     
     # Loop over censor values
     for censor_value in censor_values:    
@@ -324,16 +323,18 @@ def Monte_Carlo(ordinary_events_df: pd.DataFrame,
             if censor_AM == True:
                 shape, scale = estimate_smev_param_without_AM(
                     ordinary_events, 
-                    censor_value, 
+                    censor_value, #data_portion is auto created in this func
                     annual_max_indexes
                 ) 
             else:
                 shape, scale = smev.SMEV.estimate_smev_parameters(
                     None, # dummy class
                     ordinary_events, 
-                    [censor_value,1])
+                    [censor_value,1]) # in smev the input is data_portion [x, 1]
         except Exception as e:
-            return 999999
+            print(f"Error occurred: {e}") 
+            print("The parameters of SMEV cannot be estimated, usually due to too small number of events after censoring.") 
+            return 1111
         
         records_df = create_synthetic_records(
             seed_random, 
@@ -350,113 +351,18 @@ def Monte_Carlo(ordinary_events_df: pd.DataFrame,
             annual_max, 
             censor_value, 
             p_out_dicts_lst) 
+        
+        shape_scale_dict[censor_value.round(2)] = [shape, scale]
 
     optimal_threshold = find_optimal_threshold(p_out_dicts_lst, p_confidence)
+    if optimal_threshold != 1:
+        estimated_shape = shape_scale_dict[optimal_threshold]
+    else:
+        estimated_shape= None
+            
     
     if make_plot:
         plot_curve(p_out_dicts_lst, p_confidence, optimal_threshold)
     
-    return optimal_threshold
+    return optimal_threshold, estimated_shape
 
-
-############################################################################
-# Test for Weibull where tail can be described from weibull distribution
-# This is with given quantile, which will define tail. to test if function is working all good
-# Seed for reproducibility
-np.random.seed(42)
-# Number of samples
-n_samples = 1000
-# Generate 'year': random integers between 2000 and 2025
-years = np.random.randint(2000, 2026, size=n_samples)
-
-# Parameters
-shape = 2.0    # Weibull shape
-scale = 300.0  # Weibull scale
-
-# Generate exp and Weibull samples
-pr_exp = np.random.exponential(scale=10, size=n_samples) #scale 10 is medium slow decay where last value is around 100
-pr_exp = np.clip(pr_exp, 0, 100) # Clip to max 100
-pr_weibull = scale * np.random.weibull(shape, size=n_samples)
-pr_weibull = np.clip(pr_weibull, 0, 800) # Clip to avoid extreme outliers
-
-#  Sort both ascending (low → high)
-pr_exp_sorted = np.sort(pr_exp)
-pr_weibull_sorted = np.sort(pr_weibull)
-
-# Find splice index
-q = 0.75    # splice quantile
-split_idx = int(q * n_samples)
-
-# Take bulk from uniform (top 85%) and tail from Weibull (top 15%)
-pr_mixed = np.concatenate([
-    pr_exp_sorted[:split_idx],
-    pr_weibull_sorted[split_idx:]
-])
-# Randomly shuffle values
-np.random.shuffle(pr_mixed)
-
-df_example = pd.DataFrame({
-    'year': years,
-    'pr': pr_mixed
-}).sort_values(by="year").reset_index(drop=True)
-
-Monte_Carlo(ordinary_events_df=df_example,
-                pr_field='pr',
-                hydro_year_field='year',
-                seed_random=7,
-                synthetic_records_amount=500,
-                p_confidence=0.1,
-                make_plot=True,
-                censor_AM=False)
-
-
-############################################################################
-# Test for Weibull where tail can be described from weibull distribution
-# Set random seed for reproducibility
-np.random.seed(42)
-# Number of samples
-n_samples = 1000
-# Generate 'year': random integers between 2000 and 2025
-years = np.random.randint(2000, 2026, size=n_samples)
-# Generate 'pr': Weibull-distributed values scaled to 0–800
-shape = 2.0   # Weibull shape parameter
-scale = 300.0  # Weibull scale parameter
-pr_values = scale * np.random.weibull(shape, size=n_samples)
-pr_values = np.clip(pr_values, 0, 800) # Clip to avoid extreme outliers
-# Create DataFrame
-df_example = pd.DataFrame({
-    'year': years,
-    'pr': pr_values
-}).sort_values(by="year").reset_index(drop=True)
-
-optimal_threshold = Monte_Carlo(ordinary_events_df=df_example,
-                                pr_field='pr',
-                                hydro_year_field='year',
-                                seed_random=7,
-                                synthetic_records_amount=500,
-                                p_confidence=0.1,
-                                make_plot=True)
-
-############################################################################
-# Test for Weibull where tail can NOT be described from weibull distribution
-# Set random seed for reproducibility
-np.random.seed(42)
-# Number of samples
-n_samples = 1000
-# Generate 'year': random integers between 2000 and 2025
-years = np.random.randint(2000, 2026, size=n_samples)
-pr_values = np.random.uniform(0, 800, size=n_samples) # Clip to avoid extreme outliers
-
-# Create DataFrame
-df_example = pd.DataFrame({
-    'year': years,
-    'pr': pr_values
-}).sort_values(by="year").reset_index(drop=True)
-
-Monte_Carlo(ordinary_events_df=df_example,
-                pr_field='pr',
-                hydro_year_field='year',
-                seed_random=7,
-                synthetic_records_amount=500,
-                p_confidence=0.1,
-                make_plot=True)
