@@ -213,7 +213,13 @@ def find_optimal_threshold(p_out_dicts_lst, p_confidence):
         optimal_threshold = thresholds_lst[0] 
         # No threshold rejected
         
-    return optimal_threshold 
+    thr_below = [
+    list(d.keys())[0]  # extract the single key
+    for d in p_out_dicts_lst
+    if list(d.values())[0] < p_confidence
+    ]    
+        
+    return optimal_threshold, thr_below
 
 def plot_curve(p_out_dicts_lst, p_confidence, optimal_threshold):
     '''--------------------------------------------------------------------------
@@ -274,7 +280,8 @@ def weibul_test_MC(ordinary_events_df: pd.DataFrame,
                 synthetic_records_amount: int,
                 p_confidence: float,
                 make_plot: bool,
-                censor_AM=True):
+                censor_AM: bool = True,
+                censor_values: Union[np.ndarray, list] = np.arange(0, 1, 0.05)):
     '''--------------------------------------------------------------------------
     Function that tests the hypothesis that block maxima are samples from a parent distribution with Weibull tail.
     The tail is defined by a given left censoring threshold. 
@@ -298,14 +305,16 @@ def weibul_test_MC(ordinary_events_df: pd.DataFrame,
         Probability to be used for the test. confidence interval = 1-p_confidence
     make_plot : bool
         Choose whether or not to include the plot
+    censor_AM: bool, natively True
+        Choose whether or not the annual maximas should be included in ordinary events and test
+    censor_values_range: np.ndarray or list
+        The censoring thresholds which should be tested, nativally range from 0 to 1 in 0.05 step
 
     Returns
     -------
     Union[float, int]
         The optimal left censoring threshold, or 1 if all rejected, or 1111 if there is a problem with Weibull parameters fit
     -----------------------------------------------------------------------------'''
-    
-    censor_values = np.arange(0, 1, 0.05) #not quite convinced to hard code this. 
     
     ordinary_events_df = ordinary_events_df.sort_values(by=pr_field) 
     ordinary_events_df = ordinary_events_df.reset_index(drop=True)
@@ -326,11 +335,13 @@ def weibul_test_MC(ordinary_events_df: pd.DataFrame,
                     censor_value, #data_portion is auto created in this func
                     annual_max_indexes
                 ) 
+                
             else:
                 shape, scale = smev.SMEV.estimate_smev_parameters(
                     None, # dummy class
                     ordinary_events, 
                     [censor_value,1]) # in smev the input is data_portion [x, 1]
+                print(shape, scale)
         except Exception as e:
             print(f"Error occurred: {e}") 
             print("The parameters of SMEV cannot be estimated, usually due to too small number of events after censoring.") 
@@ -354,15 +365,15 @@ def weibul_test_MC(ordinary_events_df: pd.DataFrame,
         
         shape_scale_dict[censor_value.round(2)] = [shape, scale]
 
-    optimal_threshold = find_optimal_threshold(p_out_dicts_lst, p_confidence)
+    optimal_threshold, range_of_optimal = find_optimal_threshold(p_out_dicts_lst, p_confidence)
     if optimal_threshold != 1:
-        estimated_shape = shape_scale_dict[optimal_threshold]
+        estimated_params = shape_scale_dict[optimal_threshold]
     else:
-        estimated_shape= None
-            
+        estimated_params= None
+    
     
     if make_plot:
         plot_curve(p_out_dicts_lst, p_confidence, optimal_threshold)
     
-    return optimal_threshold, estimated_shape
+    return optimal_threshold, estimated_params, range_of_optimal
 
