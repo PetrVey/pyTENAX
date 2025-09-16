@@ -272,8 +272,10 @@ class SMEV:
         fidx = max(1, math.floor((len(sorted_df)) * data_portion[0])) 
         #tidx: last index of data to keep
         tidx = math.ceil(len(sorted_df) * data_portion[1])
-        # Create an array of indices from fidx up to tidx (inclusive)
-        to_use = np.arange(fidx, tidx)
+        if fidx == 1: #this is check basically if censoring set to [0,1], if so, we take all values
+            to_use = np.arange(fidx-1, tidx) # Create an array of indices from fidx-1 up to tidx (inclusive)
+        else: # else, we take only from this fidx, eg. [0.5,1] out of 1000 samples will take 500-999 indexes (top 500)
+            to_use = np.arange(fidx, tidx) # Create an array of indices from fidx up to tidx (inclusive)
         # Select only the subset of sorted values corresponding to the chosen quantile range
         to_use_array = sorted_df[to_use]
 
@@ -284,12 +286,10 @@ class SMEV:
         results = model.fit()
         param = results.params
 
-        slope = param[1]
-        intercept = param[0]
-
+        slope = float(param[1])
+        intercept = float(param[0])
         shape = 1 / slope
         scale = np.exp(intercept)
-
         weibull_param = [shape, scale]
 
         return weibull_param

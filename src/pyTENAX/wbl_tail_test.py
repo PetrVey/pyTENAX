@@ -44,8 +44,12 @@ def estimate_smev_param_without_AM(ordinary_events: Union[np.ndarray, pd.Series,
     #fidx: first index of data to keep
     fidx = max(1, math.floor(record_size * data_portion[0]))  
     #tidx: last index of data to keep
-    tidx = math.ceil(record_size * data_portion[1])  
-    to_use = np.arange(fidx - 1, tidx) # Create an array of indices from fidx-1 up to tidx-1 (inclusive)
+    tidx = math.ceil(record_size * data_portion[1])
+    if fidx == 1:
+        to_use = np.arange(fidx-1, tidx) # Create an array of indices from fidx-1 up to tidx (inclusive)
+    else:
+        to_use = np.arange(fidx, tidx) # Create an array of indices from fidx up to tidx (inclusive)
+        
     to_use_without_am = [index for index in to_use if index not in annual_max_indexes]
     events_without_am = sorted_df[to_use_without_am]
 
@@ -327,7 +331,8 @@ def weibul_test_MC(ordinary_events_df: pd.DataFrame,
     shape_scale_dict = {}
     
     # Loop over censor values
-    for censor_value in censor_values:    
+    for censor_value in censor_values: 
+        censor_value = censor_value.round(2)
         try:
             if censor_AM == True:
                 shape, scale = estimate_smev_param_without_AM(
@@ -335,13 +340,11 @@ def weibul_test_MC(ordinary_events_df: pd.DataFrame,
                     censor_value, #data_portion is auto created in this func
                     annual_max_indexes
                 ) 
-                
             else:
                 shape, scale = smev.SMEV.estimate_smev_parameters(
                     None, # dummy class
                     ordinary_events, 
                     [censor_value,1]) # in smev the input is data_portion [x, 1]
-                print(shape, scale)
         except Exception as e:
             print(f"Error occurred: {e}") 
             print("The parameters of SMEV cannot be estimated, usually due to too small number of events after censoring.") 
