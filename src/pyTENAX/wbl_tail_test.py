@@ -84,15 +84,15 @@ def create_synthetic_records(seed_random: int,
     
     Parameters
     ----------
-    seed_random : int
+    - seed_random : int
         Value that determines the starting point for the pseudorandom number generator => due to reproducibility
-    synthetic_records_amount : int
+    - synthetic_records_amount : int
         Value that determines how many synthetic records to generate => number of stochastic realizations
-    record_size : int
+    - record_size : int
         The number of ordinary events in the record
-    shape : float
+    - shape : float
         Weibull distribution parameter
-    scale : float
+    - scale : float
         Weibull distribution parameter
     
     Returns
@@ -187,6 +187,8 @@ def find_optimal_threshold(p_out_dicts_lst, p_confidence):
                                  If all threshold rejected - it will return 1. If not all thresholds rejected,
                                  (1-optimal_threshold) is the portion of the record that can be assumed to be 
                                  distributed Weibull.
+    - range_of_optimal: list
+        List of thresholds where p_out < p_confidence.
       
     -----------------------------------------------------------------------------'''
     
@@ -305,34 +307,34 @@ def weibul_test_MC(ordinary_events_df: pd.DataFrame,
     
     Parameters
     ----------
-    ordinary_events_df : pd.DataFrame
+    - ordinary_events_df : pd.DataFrame
         One column pandas dataframe of the ordinary events - without zeros!!!
-    pr_field : str
+    - pr_field : str
         The name of the column with the precipitation values
-    hydro_year_field : str
+    - hydro_year_field : str
         The name of the column with the hydrological-years / blocks values
-    seed_random : int
+    - seed_random : int
         Value that determines the starting point for the pseudorandom number generator => due to reproducibility
-    synthetic_records_amount : int
+    - synthetic_records_amount : int
         Value that determines how many synthetic records to generate. => number of stochastic realizations
-    p_confidence : float
+    -  p_confidence : float
         Probability to be used for the test. confidence interval = 1-p_confidence
-    make_plot : bool
+    - make_plot : bool
         Choose whether or not to include the plot
-    censor_AM: bool, natively True
+    - censor_AM: bool, natively True
         Choose whether or not the annual maximas should be included in ordinary events and test
-    censor_values_range: np.ndarray or list
+    - censor_values_range: np.ndarray or list
         The censoring thresholds which should be tested, nativally range from 0 to 1 in 0.05 step
 
     Returns
     -------
-    optimal_threshold: Union[float, int]
+    - optimal_threshold: Union[float, int]
         The optimal left censoring threshold, or 1 if all rejected, or 1111 if there is a problem with Weibull parameters fit
-    estimated_params: list
+    - estimated_params: list
         Estimated weibull parameters of the optimal threshold (None if optimal==1)
-    range_of_optimal: list
+    - range_of_optimal: list
         List of thresholds where p_out < p_confidence.
-    p_out_dicts_lst: list
+    - p_out_dicts_lst: list
         Fraction of block maxima outside of the Y = 1-p_out confidence interval 
     -----------------------------------------------------------------------------'''
     
