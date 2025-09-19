@@ -184,7 +184,7 @@ def find_optimal_threshold(p_out_dicts_lst, p_confidence):
     
     Returns:
     - optimal_threshold (float): The minimal threshold from which p_out <= p_confidence for all bigger thresholds.
-                                 If all threshold rejected - it will return 9999. If not all thresholds rejected,
+                                 If all threshold rejected - it will return 1. If not all thresholds rejected,
                                  (1-optimal_threshold) is the portion of the record that can be assumed to be 
                                  distributed Weibull.
       
