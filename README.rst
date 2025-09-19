@@ -2,7 +2,7 @@
 PyTENAX
 =================
 
-| PyTENAX contains a set of methods to apply the Non-Asymptotic statistical model for eXtreme return levels (TENAX).
+| **PyTENAX contains a set of methods to apply the Non-Asymptotic statistical model for eXtreme return levels (TENAX).**
 | Presented in manuscript:
 | Marra, F., Koukoula, M., Canale, A., & Peleg, N. (2023). 
 | Predicting extreme sub-hourly precipitation intensification based on temperature shifts. 
@@ -14,7 +14,7 @@ TEmperature-dependent Non-Asymptotic statistical model for eXtreme return levels
 https://doi.org/10.5281/zenodo.8332232
 
 
-pyTENAX repository also includes:
+| **pyTENAX repository also includes:**
 | *SMEV class (Simplified Metastatistical Extreme Value)*
 | For more information about SMEV, please see manuscripts:
 | Francesco Marra, Davide Zoccatelli, Moshe Armon, Efrat Morin.
