@@ -14,9 +14,10 @@ from typing import List, Tuple, Union, Optional
 import os
 import matplotlib.pyplot as plt
 from pyTENAX import smev
+import warnings
 
 #subgraph Core_Process["Monte_Carlo Hypothesis Test weibull tail test"]
-#    A[Monte_Carlo] --> B[estimate_smev_param_without_AM]
+#    A[weibul_test_MC] --> B[estimate_smev_param_without_AM]
 #    A --> C[create_synthetic_records]
 #    A --> D[check_confidence_interval]
 #    A --> E[find_optimal_threshold]
@@ -175,7 +176,7 @@ def find_optimal_threshold(p_out_dicts_lst, p_confidence):
     '''--------------------------------------------------------------------------
     Function that finds the optimal threshold out of the list of dicts.
     The function returns the minimal threshold from which p_out <= p_confidence for all bigger thresholds.
-    If all threshold rejected - it will return 0.95 
+    If all threshold rejected - it will return 1
     
     Arguments:
     - p_out_dicts_lst (list): List of dicts for each of the censor values tested, as follow: {censor_value:p_out}
@@ -280,10 +281,10 @@ def plot_curve(p_out_dicts_lst, p_confidence, optimal_threshold):
 def weibul_test_MC(ordinary_events_df: pd.DataFrame,
                 pr_field: str,
                 hydro_year_field: str,
-                seed_random: int,
-                synthetic_records_amount: int,
-                p_confidence: float,
-                make_plot: bool,
+                seed_random: int= 42,
+                synthetic_records_amount: int=500,
+                p_confidence: float =0.1,
+                make_plot: bool = True,
                 censor_AM: bool = True,
                 censor_values: Union[np.ndarray, list] = np.arange(0, 1, 0.05)):
     '''--------------------------------------------------------------------------
@@ -292,6 +293,15 @@ def weibul_test_MC(ordinary_events_df: pd.DataFrame,
     This function will return the optimal left censoring threshold. If all threshold rejected - it will return 1.
     If not all thresholds rejected, (1-optimal_threshold) is the portion of the record that can be assumed to be
     distributed Weibull.
+    
+    ⚠️ Warning:
+    If the returned optimal_threshold == 1.0, this does not necessarily mean that 
+    all thresholds failed. It may indicate that your tested threshold range 
+    extended too high (e.g., up to 0.95 or higher), where results are dominated 
+    by stochastic sampling noise of extremes.  
+    In such cases, you should check whether some lower thresholds worked.  
+    As a rule of thumb, thresholds above ~0.95 are usually unreliable, though 
+    the exact cutoff is case dependent.
     
     Parameters
     ----------
@@ -316,8 +326,14 @@ def weibul_test_MC(ordinary_events_df: pd.DataFrame,
 
     Returns
     -------
-    Union[float, int]
+    optimal_threshold: Union[float, int]
         The optimal left censoring threshold, or 1 if all rejected, or 1111 if there is a problem with Weibull parameters fit
+    estimated_params: list
+        Estimated weibull parameters of the optimal threshold (None if optimal==1)
+    range_of_optimal: list
+        List of thresholds where p_out < p_confidence.
+    p_out_dicts_lst: list
+        Fraction of block maxima outside of the Y = 1-p_out confidence interval 
     -----------------------------------------------------------------------------'''
     
     ordinary_events_df = ordinary_events_df.sort_values(by=pr_field) 
@@ -377,6 +393,17 @@ def weibul_test_MC(ordinary_events_df: pd.DataFrame,
     
     if make_plot:
         plot_curve(p_out_dicts_lst, p_confidence, optimal_threshold)
+        
+    # Warning if optimal threshold is 1.0
+    if (optimal_threshold == 1.0) and (len(range_of_optimal) != 0):
+        warnings.warn(
+            "Optimal threshold reached the upper limit (0.95) but not all thresholds were rejected.\n"
+            "Consider checking your tested threshold range:\n"
+            "too high thresholds may fall into stochastic noise of extremes\n"
+            "(typically values > 0.95 are unreliable).\n"
+            "Check if lower thresholds provided valid results.\n",
+            UserWarning
+        )
     
-    return optimal_threshold, estimated_params, range_of_optimal
+    return optimal_threshold, estimated_params, range_of_optimal, p_out_dicts_lst
 

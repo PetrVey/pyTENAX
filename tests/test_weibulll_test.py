@@ -112,7 +112,7 @@ class TestWeibullTail(unittest.TestCase):
                 'pr': pr_mixed
             }).sort_values(by="year").reset_index(drop=True)
             
-            opt_threshold, estimated_params, range_optimal = weibul_test_MC(ordinary_events_df=df_example,
+            opt_threshold, estimated_params, range_optimal, _ = weibul_test_MC(ordinary_events_df=df_example,
                                                                             pr_field='pr',
                                                                             hydro_year_field='year',
                                                                             seed_random=random_seed,
@@ -168,7 +168,7 @@ class TestWeibullTail(unittest.TestCase):
                 'pr': pr_mixed
             }).sort_values(by="year").reset_index(drop=True)
             
-            opt_threshold, estimated_params, range_optimal = weibul_test_MC(ordinary_events_df=df_example,
+            opt_threshold, estimated_params, range_optimal, _ = weibul_test_MC(ordinary_events_df=df_example,
                                                                             pr_field='pr',
                                                                             hydro_year_field='year',
                                                                             seed_random=random_seed,
@@ -199,7 +199,7 @@ class TestWeibullTail(unittest.TestCase):
             'pr': pr_values
         }).sort_values(by="year").reset_index(drop=True)
         
-        optimal_threshold, estimated_params, range_optimal = weibul_test_MC(ordinary_events_df=df_example,
+        optimal_threshold, estimated_params, range_optimal, _ = weibul_test_MC(ordinary_events_df=df_example,
                                                                 pr_field='pr',
                                                                 hydro_year_field='year',
                                                                 seed_random=random_seed,
@@ -226,7 +226,7 @@ class TestWeibullTail(unittest.TestCase):
             'pr': pr_values
         }).sort_values(by="year").reset_index(drop=True)
         
-        optimal_threshold, estimated_params, range_optimal = weibul_test_MC(ordinary_events_df=df_example,
+        optimal_threshold, estimated_params, range_optimal, _ = weibul_test_MC(ordinary_events_df=df_example,
                                                                 pr_field='pr',
                                                                 hydro_year_field='year',
                                                                 seed_random=random_seed ,
