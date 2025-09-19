@@ -5,6 +5,15 @@ Created on Wed Sep 10 15:53:57 2025
 @author1: Yaniv yaniv.goldschmidt@unipd.it
 @author2: PetrVey
 
+The test is described in: 
+- Marra F, W Amponsah, SM Papalexiou, 2023. 
+Non-asymptotic Weibull tails explain the statistics of extreme daily precipitation. 
+Adv. Water Resour., 173, 104388, 
+https://doi.org/10.1016/j.advwatres.2023.104388
+
+Original code written in MATLAB is available at:
+https://zenodo.org/records/7234708
+
 """
 import math
 import numpy as np
