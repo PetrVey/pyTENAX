@@ -253,12 +253,12 @@ class SMEV:
         return arr_vals, arr_dates, n_ordinary_per_year, n_ordinary
 
     def estimate_smev_parameters(
-        self, ordinary_events_df: pd.DataFrame, data_portion: list[Tuple[int, float]]
+        self, ordinary_events: Union[np.ndarray, pd.Series, list], data_portion: list[Tuple[int, float]]
     ) -> list[float]:
         """Function that estimates shape and scale parameters of the Weibull distribution.
 
         Args:
-            ordinary_events_df (pd.DataFrame): Dataframe with values of ordinary events.
+            ordinary_events ([np.ndarray, pd.Series, list): values of ordinary events.
             data_portion (list): Lower and upper limits of the probabilities of data \
                 to be used for the parameters estimation.
 
@@ -266,11 +266,17 @@ class SMEV:
             list[float]: Shape and scale parameters of the Weibull distribution.
         """
 
-        sorted_df = np.sort(ordinary_events_df)
+        sorted_df = np.sort(ordinary_events)
         ECDF = np.arange(1, 1 + len(sorted_df)) / (1 + len(sorted_df))
-        fidx = max(1, math.floor((len(sorted_df)) * data_portion[0]))
+        #fidx: first index of data to keep
+        fidx = max(1, math.floor((len(sorted_df)) * data_portion[0])) 
+        #tidx: last index of data to keep
         tidx = math.ceil(len(sorted_df) * data_portion[1])
-        to_use = np.arange(fidx - 1, tidx)
+        if fidx == 1: #this is check basically if censoring set to [0,1], if so, we take all values
+            to_use = np.arange(fidx-1, tidx) # Create an array of indices from fidx-1 up to tidx (inclusive)
+        else: # else, we take only from this fidx, eg. [0.5,1] out of 1000 samples will take 500-999 indexes (top 500)
+            to_use = np.arange(fidx, tidx) # Create an array of indices from fidx up to tidx (inclusive)
+        # Select only the subset of sorted values corresponding to the chosen quantile range
         to_use_array = sorted_df[to_use]
 
         X = np.log(np.log(1 / (1 - ECDF[to_use])))
@@ -280,12 +286,10 @@ class SMEV:
         results = model.fit()
         param = results.params
 
-        slope = param[1]
-        intercept = param[0]
-
+        slope = float(param[1])
+        intercept = float(param[0])
         shape = 1 / slope
         scale = np.exp(intercept)
-
         weibull_param = [shape, scale]
 
         return weibull_param
