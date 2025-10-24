@@ -383,13 +383,17 @@ class TENAX:
                 else:
                     # the +1 in end_time_index is because then we search by index but we want to includde last as well,
                     # without, it slices eg. end index is 10, without +1 it slices 0 to 9 instead of 0 to 10 (stops 1 before)
-                    # get index of ll_val within the sliced array
-                    ll_idx_in_slice = np.nanargmax(
-                        arr_conv[start_time_idx : end_time_idx + 1]
-                    )
+                    # get index of ll_val within the sliced array and perform convolve in this slice
+                    arr_conv2 = np.convolve(data[start_time_idx : end_time_idx + 1],
+                                            np.ones(int(self.durations[d] / self.time_resolution), dtype=int),
+                                            "same",
+                                        )
+                    # get index of max value in convolve vector
+                    ll_idx_in_slice = np.nanargmax(arr_conv2)
+
                     # adjust the index to refer to the original arr_conv
                     ll_idx_in_arr_conv = start_time_idx + ll_idx_in_slice
-                    ll_val = arr_conv[ll_idx_in_arr_conv]
+                    ll_val = arr_conv2[ll_idx_in_slice]
                     ll_date = time_index[ll_idx_in_arr_conv]
 
                 ll_vals.append(ll_val)
