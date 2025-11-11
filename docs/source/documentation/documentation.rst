@@ -33,3 +33,15 @@ The `SMEV` implementation in `pyTENAX` builds upon the concepts from the
    :members:
    :undoc-members:
    :show-inheritance:
+   
+   
+Weibull tail test 
+----------------------
+Original code written in MATLAB is available at:
+https://zenodo.org/records/7234708
+For now, users can refer to the file tests/test_weibull_test.py to see how to use this code.
+
+.. automodule:: pyTENAX.wbl_tail_test
+   :members:
+   :undoc-members:
+   :show-inheritance:
