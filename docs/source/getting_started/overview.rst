@@ -57,7 +57,7 @@ Current pyTENAX developers:
 - Ella Thomas (Research Assistant at the University of Padova)
 - Jannis Hoch (Senior Hydrologist at Fathom)
 - Rashid Akbary (PhD student at the University of Padova)
-
+- Yaniv Goldschmidt (Research Assistant at the University of Padova)
 We would like to express our gratitude to Riccardo Ciceri (riccardo.ciceri@studenti.unipd.it) for his contribution to the initial development phase of pyTENAX.
 
 

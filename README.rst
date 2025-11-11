@@ -2,7 +2,7 @@
 PyTENAX
 =================
 
-| PyTENAX contains a set of methods to apply the Non-Asymptotic statistical model for eXtreme return levels (TENAX).
+| **PyTENAX contains a set of methods to apply the Non-Asymptotic statistical model for eXtreme return levels (TENAX).**
 | Presented in manuscript:
 | Marra, F., Koukoula, M., Canale, A., & Peleg, N. (2023). 
 | Predicting extreme sub-hourly precipitation intensification based on temperature shifts. 
@@ -14,8 +14,8 @@ TEmperature-dependent Non-Asymptotic statistical model for eXtreme return levels
 https://doi.org/10.5281/zenodo.8332232
 
 
-pyTENAX repository also includes SMEV class (Simplified Metastatistical Extreme Value)
-
+| **pyTENAX repository also includes:**
+| *1) SMEV class (Simplified Metastatistical Extreme Value)*
 | For more information about SMEV, please see manuscripts:
 | Francesco Marra, Davide Zoccatelli, Moshe Armon, Efrat Morin.
 | A simplified MEV formulation to model extremes emerging from multiple nonstationary underlying processes.
@@ -27,8 +27,17 @@ pyTENAX repository also includes SMEV class (Simplified Metastatistical Extreme 
 | Geophys. Res. Lett., 47, 18, e2020GL090209. 2020.
 | https://doi.org/10.1029/2020GL090209 
 
-pythonized versionof SMEV downloaded from:
+pythonized version of SMEV downloaded from:
 https://github.com/luigicesarini/pysmev
+
+| *2) A test for the hypothesis: block maxima are samples from a parent distribution with Weibull tail*
+| The test is described in: 
+|  Marra F, W Amponsah, SM Papalexiou, 2023. 
+| Non-asymptotic Weibull tails explain the statistics of extreme daily precipitation. 
+| Adv. Water Resour., 173, 104388, 
+| https://doi.org/10.1016/j.advwatres.2023.104388
+| Matlab source code:
+| https://zenodo.org/records/7234708
 
 Installation
 ------------
