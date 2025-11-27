@@ -6,16 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  update-traffic:
+  print-traffic:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout main branch
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
@@ -33,38 +27,12 @@ jobs:
                https://api.github.com/repos/PetrVey/pyTENAX/traffic/clones \
                > clones.json
 
-      - name: Debug API response
-        run: |
-          echo "=== Views JSON ==="
-          cat views.json
-          echo "=== Clones JSON ==="
-          cat clones.json
-
-      - name: Append today's traffic into traffic.json
+      - name: Print today's traffic
         run: |
           today=$(date -I)
-
-          # Extract today's views and clones as arrays (empty if none)
-          views_today=$(jq '[.views[] | select(.timestamp | startswith("'"$today"'"))] // []' views.json)
-          clones_today=$(jq '[.clones[] | select(.timestamp | startswith("'"$today"'"))] // []' clones.json)
-
-          # Ensure traffic.json exists
-          if [ ! -f traffic.json ]; then echo "[]" > traffic.json; fi
-
-          # Append today's data safely
-          jq ". + [{
-            \"date\": \"$today\",
-            \"views\": $views_today,
-            \"clones\": $clones_today
-          }]" traffic.json > tmp.json && mv tmp.json traffic.json
-
-      - name: Push updates to traffic-data branch
-        env:
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git checkout -B traffic-data
-          git add traffic.json
-          git commit -m "Update traffic data for $today" || echo "No changes"
-          git push https://$PAT_TOKEN@github.com/PetrVey/pyTENAX.git traffic-data --force
+          
+          echo "=== Today's Views ==="
+          jq '[.views[] | select(.timestamp | startswith("'"$today"'"))] // []' views.json
+          
+          echo "=== Today's Clones ==="
+          jq '[.clones[] | select(.timestamp | startswith("'"$today"'"))] // []' clones.json
