@@ -15,6 +15,7 @@ jobs:
         with:
           ref: traffic-data
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}  # allows push to traffic-data
 
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
