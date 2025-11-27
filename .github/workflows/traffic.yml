@@ -37,8 +37,8 @@ jobs:
         run: |
           today=$(date -I)
 
-          views_today=$(jq '.views[] | select(.timestamp | startswith("'"$today"'"))' views.json)
-          clones_today=$(jq '.clones[] | select(.timestamp | startswith("'"$today"'"))' clones.json)
+          views_today=$(jq '.views // [] | .[] | select(.timestamp | startswith("'"$today"'"))' views.json)
+          clones_today=$(jq '.clones // [] | .[] | select(.timestamp | startswith("'"$today"'"))' clones.json)
 
           if [ ! -f traffic.json ]; then echo "[]" > traffic.json; fi
 
