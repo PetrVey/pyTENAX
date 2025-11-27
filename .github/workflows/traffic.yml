@@ -15,7 +15,7 @@ jobs:
         with:
           ref: traffic-data
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}  # allows push to traffic-data
+          token: ${{ secrets.PAT_TOKEN }}  # <-- use PAT for push
 
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
@@ -55,7 +55,7 @@ jobs:
             \"views\": $views_today,
             \"clones\": $clones_today
           }]" traffic.json > tmp.json && mv tmp.json traffic.json
-          
+
       - name: Check current branch
         run: |
           current_branch=$(git rev-parse --abbrev-ref HEAD)
@@ -64,11 +64,13 @@ jobs:
             echo "Not on traffic-data branch, skipping commit."
             exit 1
           fi
-    
+
       - name: Commit changes
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add traffic.json
           git commit -m "Update traffic data for $today" || echo "No changes"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/PetrVey/pyTENAX.git HEAD:traffic-data
+          git push https://$PAT_TOKEN@github.com/PetrVey/pyTENAX.git HEAD:traffic-data
