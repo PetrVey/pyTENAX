@@ -17,18 +17,18 @@ jobs:
           fetch-depth: 0
 
       - name: Install jq
-        run: sudo apt-get install -y jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Download traffic data (views)
         run: |
-          curl -H "Accept: application/vnd.github+json" \
+          curl -s -H "Accept: application/vnd.github+json" \
                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
                https://api.github.com/repos/PetrVey/pyTENAX/traffic/views \
                > views.json
 
       - name: Download traffic data (clones)
         run: |
-          curl -H "Accept: application/vnd.github+json" \
+          curl -s -H "Accept: application/vnd.github+json" \
                -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
                https://api.github.com/repos/PetrVey/pyTENAX/traffic/clones \
                > clones.json
@@ -37,11 +37,18 @@ jobs:
         run: |
           today=$(date -I)
 
+          # Extract today's views safely, default to empty array
           views_today=$(jq '.views // [] | .[] | select(.timestamp | startswith("'"$today"'"))' views.json)
           clones_today=$(jq '.clones // [] | .[] | select(.timestamp | startswith("'"$today"'"))' clones.json)
 
+          # If empty, use null
+          if [ -z "$views_today" ]; then views_today="null"; fi
+          if [ -z "$clones_today" ]; then clones_today="null"; fi
+
+          # Ensure traffic.json exists
           if [ ! -f traffic.json ]; then echo "[]" > traffic.json; fi
 
+          # Append today's data safely
           jq ". + [{
             \"date\": \"$today\",
             \"views\": $views_today,
