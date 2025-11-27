@@ -15,7 +15,7 @@ jobs:
         with:
           ref: traffic-data
           fetch-depth: 0
-          token: ${{ secrets.PAT_TOKEN }}  # <-- use PAT for push
+          token: ${{ secrets.PAT_TOKEN }}  # use PAT to allow push
 
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
@@ -34,17 +34,20 @@ jobs:
                https://api.github.com/repos/PetrVey/pyTENAX/traffic/clones \
                > clones.json
 
+      - name: Debug API response
+        run: |
+          echo "=== Views JSON ==="
+          cat views.json
+          echo "=== Clones JSON ==="
+          cat clones.json
+
       - name: Append today's traffic into traffic.json
         run: |
           today=$(date -I)
 
-          # Extract today's views safely, default to empty array
-          views_today=$(jq '.views // [] | .[] | select(.timestamp | startswith("'"$today"'"))' views.json)
-          clones_today=$(jq '.clones // [] | .[] | select(.timestamp | startswith("'"$today"'"))' clones.json)
-
-          # If empty, use null
-          if [ -z "$views_today" ]; then views_today="null"; fi
-          if [ -z "$clones_today" ]; then clones_today="null"; fi
+          # Extract today's views and clones as arrays (empty if none)
+          views_today=$(jq '[.views[] | select(.timestamp | startswith("'"$today"'"))] // []' views.json)
+          clones_today=$(jq '[.clones[] | select(.timestamp | startswith("'"$today"'"))] // []' clones.json)
 
           # Ensure traffic.json exists
           if [ ! -f traffic.json ]; then echo "[]" > traffic.json; fi
