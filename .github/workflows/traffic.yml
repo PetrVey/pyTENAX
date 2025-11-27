@@ -1,0 +1,57 @@
+name: Save GitHub Traffic
+
+on:
+  schedule:
+    - cron: "0 1 * * *"  # daily at 01:00 UTC
+  workflow_dispatch:
+
+jobs:
+  update-traffic:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout traffic-data branch
+        uses: actions/checkout@v4
+        with:
+          ref: traffic-data
+          fetch-depth: 0
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Download traffic data (views)
+        run: |
+          curl -H "Accept: application/vnd.github+json" \
+               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+               https://api.github.com/repos/PetrVey/pyTENAX/traffic/views \
+               > views.json
+
+      - name: Download traffic data (clones)
+        run: |
+          curl -H "Accept: application/vnd.github+json" \
+               -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+               https://api.github.com/repos/PetrVey/pyTENAX/traffic/clones \
+               > clones.json
+
+      - name: Append today's traffic into traffic.json
+        run: |
+          today=$(date -I)
+
+          views_today=$(jq '.views[] | select(.timestamp | startswith("'"$today"'"))' views.json)
+          clones_today=$(jq '.clones[] | select(.timestamp | startswith("'"$today"'"))' clones.json)
+
+          if [ ! -f traffic.json ]; then echo "[]" > traffic.json; fi
+
+          jq ". + [{
+            \"date\": \"$today\",
+            \"views\": $views_today,
+            \"clones\": $clones_today
+          }]" traffic.json > tmp.json && mv tmp.json traffic.json
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add traffic.json
+          git commit -m "Update traffic data for $today" || echo "No changes"
+          git push
