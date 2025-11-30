@@ -34,24 +34,43 @@ jobs:
                https://api.github.com/repos/PetrVey/pyTENAX/traffic/clones \
                > clones.json
 
-      - name: Save today's views and clones
+      - name: Append today's traffic data
         run: |
           today=$(date -I)
 
-          # Extract today's data safely
+          # Extract views and clones for today
           views_today=$(jq '[.views // [] | .[] | select(.timestamp | startswith("'"$today"'"))]' views.json)
           clones_today=$(jq '[.clones // [] | .[] | select(.timestamp | startswith("'"$today"'"))]' clones.json)
 
-          # Save to separate files
-          echo "$views_today" > traffic-views.json
-          echo "$clones_today" > traffic-clones.json
+          # --- Ensure empty entries become [{"timestamp": "...", "count": 0}] ---
 
-      - name: Commit and push if changed
+          if [ "$(echo "$views_today" | jq 'length')" -eq 0 ]; then
+            views_today=$(jq -n --arg t "$today" '[{timestamp: $t + "T00:00:00Z", count: 0}]')
+          fi
+
+          if [ "$(echo "$clones_today" | jq 'length')" -eq 0 ]; then
+            clones_today=$(jq -n --arg t "$today" '[{timestamp: $t + "T00:00:00Z", count: 0}]')
+          fi
+
+          # --- Ensure output JSON files exist as arrays ---
+
+          [ -f traffic-views.json ] || echo "[]" > traffic-views.json
+          [ -f traffic-clones.json ] || echo "[]" > traffic-clones.json
+
+          # --- Append new entries ---
+
+          jq --slurpfile new <(echo "$views_today") '. + $new[0]' \
+             traffic-views.json > tmp && mv tmp traffic-views.json
+
+          jq --slurpfile new <(echo "$clones_today") '. + $new[0]' \
+             traffic-clones.json > tmp && mv tmp traffic-clones.json
+
+      - name: Commit and push changes
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add traffic-views.json traffic-clones.json
-          git diff --cached --quiet || git commit -m "Update traffic data for $today"
+          git diff --cached --quiet || git commit -m "Update traffic data for $(date -I)"
           git push https://$PAT_TOKEN@github.com/PetrVey/pyTENAX.git traffic-data
