@@ -42,22 +42,24 @@ jobs:
           views_today=$(jq '[.views // [] | .[] | select(.timestamp | startswith("'"$today"'"))]' views.json)
           clones_today=$(jq '[.clones // [] | .[] | select(.timestamp | startswith("'"$today"'"))]' clones.json)
 
-          # --- Ensure empty entries become [{"timestamp": "...", "count": 0}] ---
+          # --- If empty, create 0-count entries ---
 
           if [ "$(echo "$views_today" | jq 'length')" -eq 0 ]; then
-            views_today=$(jq -n --arg t "$today" '[{timestamp: $t + "T00:00:00Z", count: 0}]')
+            views_today=$(jq -n --arg t "$today" \
+              '[{ "timestamp": ($t + "T00:00:00Z"), "count": 0 }]')
           fi
 
           if [ "$(echo "$clones_today" | jq 'length')" -eq 0 ]; then
-            clones_today=$(jq -n --arg t "$today" '[{timestamp: $t + "T00:00:00Z", count: 0}]')
+            clones_today=$(jq -n --arg t "$today" \
+              '[{ "timestamp": ($t + "T00:00:00Z"), "count": 0 }]')
           fi
 
-          # --- Ensure output JSON files exist as arrays ---
+          # --- Ensure output files exist as valid arrays ---
 
           [ -f traffic-views.json ] || echo "[]" > traffic-views.json
           [ -f traffic-clones.json ] || echo "[]" > traffic-clones.json
 
-          # --- Append new entries ---
+          # --- Append entries ---
 
           jq --slurpfile new <(echo "$views_today") '. + $new[0]' \
              traffic-views.json > tmp && mv tmp traffic-views.json
@@ -72,5 +74,6 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add traffic-views.json traffic-clones.json
+
           git diff --cached --quiet || git commit -m "Update traffic data for $(date -I)"
           git push https://$PAT_TOKEN@github.com/PetrVey/pyTENAX.git traffic-data
