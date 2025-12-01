@@ -14,5 +14,10 @@
   {
     "timestamp": "2025-12-01T00:00:00Z",
     "count": 0
+  },
+  {
+    "timestamp": "2025-12-01T00:00:00Z",
+    "count": 28,
+    "uniques": 1
   }
 ]
