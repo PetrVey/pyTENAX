@@ -2,7 +2,7 @@ name: Save GitHub Traffic
 
 on:
   schedule:
-    - cron: "0 1 * * *"  # daily at 01:00 UTC
+    - cron: "30 23 * * *"  # daily at 23:30 UTC
   workflow_dispatch:
 
 jobs:
