@@ -67,5 +67,10 @@
     "timestamp": "2025-12-11T00:00:00Z",
     "count": 5,
     "uniques": 2
+  },
+  {
+    "timestamp": "2025-12-12T00:00:00Z",
+    "count": 2,
+    "uniques": 1
   }
 ]
