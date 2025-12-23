@@ -119,5 +119,9 @@
     "timestamp": "2025-12-22T00:00:00Z",
     "count": 1,
     "uniques": 1
+  },
+  {
+    "timestamp": "2025-12-23T00:00:00Z",
+    "count": 0
   }
 ]
