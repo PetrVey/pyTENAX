@@ -33,10 +33,18 @@ jobs:
                -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" \
                https://api.github.com/repos/PetrVey/pyTENAX/traffic/clones \
                > clones.json
+               
+      - name: Debug – show API payloads
+        run: |
+          echo "===== CLONES ====="
+          cat clones.json
+          echo ""
+          echo "===== VIEWS ====="
+          cat views.json
 
       - name: Append today's traffic data
         run: |
-          today=$(date -I)
+          today=$(date -I -d "yesterday")
 
           # Extract views and clones for today
           views_today=$(jq '[.views // [] | .[] | select(.timestamp | startswith("'"$today"'"))]' views.json)
