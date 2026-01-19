@@ -13,6 +13,12 @@ Other publications
 
 
 
+**Nadav Peleg, Marika Koukoula, Jan Rajczak, Sven Kotlarski, Eleonora Dallan, and Francesco Marra**  
+*Hotter summers, heavier showers: Global warming and its impact on Swiss short-duration rainfall extremes*  
+Weather and Climate Extremes, Volume 50, 2025, 100829, ISSN 2212-0947,
+`https://doi.org/10.1016/j.wace.2025.100829 <https://doi.org/10.1016/j.wace.2025.100829>`_
+
+
 **Patrick Laux, David Feldmann, Francesco Marra, Hendrik Feldmann, Harald Kunstmann , Katja Trachte, and Nadav Peleg**  
 *Future precipitation extremes and urban flood risk assessment using a non-stationary and convection-permitting climate-hydrodynamic modeling framework*  
 Journal of Hydrology, Volume 661, Part B, 2025, 133607
