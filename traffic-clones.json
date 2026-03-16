@@ -522,5 +522,10 @@
     "timestamp": "2026-03-14T00:00:00Z",
     "count": 10,
     "uniques": 5
+  },
+  {
+    "timestamp": "2026-03-15T00:00:00Z",
+    "count": 12,
+    "uniques": 6
   }
 ]
