@@ -227,6 +227,119 @@ class SMEV:
 
         return consecutive_values
         
+def get_ordinary_events_new(
+        self,
+        data: np.ndarray,
+        dates: np.ndarray,
+        check_gaps=True,
+    ) -> list:
+        """Vectorized ordinary event extraction using np.diff + np.split.
+ 
+        Functionally equivalent to `get_ordinary_events` (numpy branch) but
+        significantly faster by replacing the Python for-loop with vectorized
+        numpy operations.
+ 
+        Args:
+            data (np.ndarray): Array with precipitation values.
+            dates (np.ndarray): Array with dates of precipitation values. dtype must be datetime64[ns].
+            check_gaps (bool, optional): Check for gaps in precipitation time series.
+                Defaults to True.
+ 
+        Returns:
+            list: Consecutive values above `self.min_rain` separated by more than `self.storm_separation_time`.
+        """
+        if not self.__incomplete_years_removed__:
+            raise ValueError(
+                "You must run 'remove_incomplete_years' before running this function. "
+                "If you are sure your data is complete, set "
+                "self.__incomplete_years_removed__ = True to bypass this check."
+            )
+ 
+        above_threshold_indices = np.where(data > self.min_rain)[0]
+ 
+        if len(above_threshold_indices) == 0:
+            return []
+ 
+        # Get dates at above-threshold positions
+        above_dates = dates[above_threshold_indices]
+ 
+        # Compute time differences between consecutive above-threshold timesteps (in nanoseconds)
+        time_diffs_above = np.diff(above_dates).astype(np.int64)
+ 
+        # Find where gaps exceed separation time
+        separation_ns = int(self.storm_separation_time * 3.6e12)  # hours to nanoseconds
+        gap_mask = time_diffs_above > separation_ns
+ 
+        # Split indices at gap locations
+        split_points = np.where(gap_mask)[0] + 1
+ 
+        # Split into groups of indices, then map back to dates
+        index_groups = np.split(above_threshold_indices, split_points)
+ 
+        # Convert to list of date arrays (same format as original)
+        consecutive_values = [dates[group] for group in index_groups]
+ 
+        if check_gaps:
+            # remove event that starts before dataset starts in regard of separation time
+            if (consecutive_values[0][0] - dates[0]).item() < (
+                self.storm_separation_time * 3.6e12
+            ):  # this numpy dt, so still in nanoseconds
+                consecutive_values.pop(0)
+            else:
+                pass
+ 
+            # remove event that ends before dataset ends in regard of separation time
+            if (dates[-1] - consecutive_values[-1][-1]).item() < (
+                self.storm_separation_time * 3.6e12
+            ):  # this numpy dt, so still in nanoseconds
+                consecutive_values.pop()
+            else:
+                pass
+ 
+            # Locate OE that ends before gaps in data starts.
+            # Calculate the differences between consecutive elements
+            time_diffs = np.diff(dates)
+            # difference of first element is time resolution
+            time_res = time_diffs[0]
+            # Identify gaps (where the difference is greater than separation time)
+            gap_indices_end = np.where(
+                time_diffs
+                > np.timedelta64(int(self.storm_separation_time * 3.6e12), "ns")
+            )[0]
+            # extend by another index in gap cause we need to check if there is OE there too
+            gap_indices_start = gap_indices_end + 1
+ 
+            match_info = []
+            for gap_idx in gap_indices_end:
+                end_date = dates[gap_idx]
+                start_date = end_date - np.timedelta64(
+                    int(self.storm_separation_time * 3.6e12), "ns"
+                )
+                temp_date_array = np.arange(start_date, end_date, time_res)
+ 
+                for i, sub_array in enumerate(consecutive_values):
+                    match_indices = np.where(np.isin(sub_array, temp_date_array))[0]
+                    if match_indices.size > 0:
+                        match_info.append(i)
+ 
+            for gap_idx in gap_indices_start:
+                start_date = dates[gap_idx]
+                end_date = start_date + np.timedelta64(
+                    int(self.storm_separation_time * 3.6e12), "ns"
+                )
+                temp_date_array = np.arange(start_date, end_date, time_res)
+ 
+                for i, sub_array in enumerate(consecutive_values):
+                    match_indices = np.where(np.isin(sub_array, temp_date_array))[0]
+                    if match_indices.size > 0:
+                        match_info.append(i)
+ 
+            for del_index in sorted(match_info, reverse=True):
+                del consecutive_values[del_index]
+ 
+        return consecutive_values
+        
+        
         
     def remove_short(
         self, list_ordinary: list
@@ -397,6 +510,76 @@ class SMEV:
 
         return dict_ordinary, dict_AMS
 
+def get_ordinary_events_values_new(self_durations, self_time_resolution,
+                                    data, dates, arr_dates_oe):
+    """Optimized version of get_ordinary_events_values.
+    
+    Uses np.convolve per event (for exact match with original),
+    but optimizes:
+    - searchsorted batched once for all durations
+    - years precomputed once
+    - pre-allocated output arrays instead of list.append
+    - vectorized AMS with numpy groupby-style ops
+    """
+    dict_ordinary = {}
+    dict_AMS = {}
+
+    time_index = dates.reshape(-1)
+    n_events = arr_dates_oe.shape[0]
+
+    # Batch searchsorted (once for all durations)
+    oe_end = arr_dates_oe[:, 0].astype("datetime64[ns]")
+    oe_start = arr_dates_oe[:, 1].astype("datetime64[ns]")
+    start_indices = np.searchsorted(time_index, oe_start)
+    end_indices = np.searchsorted(time_index, oe_end)
+
+    # Precompute years (once for all durations)
+    ll_yrs = np.array([
+        oe_end[i].astype("datetime64[Y]").item().year
+        for i in range(n_events)
+    ], dtype=np.int64)
+
+    # Precompute unique years and masks for AMS
+    unique_years = np.unique(ll_yrs)
+    year_masks = {yr: ll_yrs == yr for yr in unique_years}
+
+    for d in range(len(self_durations)):
+        window_size = int(self_durations[d] / self_time_resolution)
+        ones_kernel = np.ones(window_size, dtype=np.int64)
+
+        # Pre-allocate arrays
+        max_vals = np.empty(n_events, dtype=np.float64)
+        max_global_idx = np.empty(n_events, dtype=np.int64)
+
+        for i in range(n_events):
+            si = start_indices[i]
+            ei = end_indices[i]
+
+            if si == ei:
+                max_vals[i] = data[si]
+                max_global_idx[i] = si
+            else:
+                arr_conv2 = np.convolve(data[si:ei + 1], ones_kernel, "same")
+                ll_idx_in_slice = np.nanargmax(arr_conv2)
+                max_vals[i] = arr_conv2[ll_idx_in_slice]
+                max_global_idx[i] = si + ll_idx_in_slice
+
+        ll_dates_arr = time_index[max_global_idx]
+
+        # Vectorized AMS
+        ams_vals = np.array([np.max(max_vals[mask]) for yr, mask in year_masks.items()])
+
+        df_ams = pd.DataFrame({"year": unique_years, "AMS": ams_vals})
+        df_oe = pd.DataFrame({
+            "year": ll_yrs,
+            "oe_time": ll_dates_arr,
+            "ordinary": max_vals,
+        })
+        dict_AMS[f"{self_durations[d]}"] = df_ams
+        dict_ordinary[f"{self_durations[d]}"] = df_oe
+
+    return dict_ordinary, dict_AMS
+    
 
     def estimate_smev_parameters(
         self, ordinary_events: Union[np.ndarray, pd.Series, list], data_portion: list[Tuple[int, float]]
