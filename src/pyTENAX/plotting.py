@@ -388,3 +388,39 @@ def TNX_obs_scaling_rate(P, T, qs, niter):
     return qhat, qhat_unc
 
 
+def SMEV_FIG_valid(
+    AMS: pd.DataFrame,
+    RP: list,
+    smev_RL: Union[np.ndarray, list] = [],
+    smev_RL_unc=0,
+    obscol_shape="g+",
+    smev_colshape="--r",
+    obslabel="Observed annual maxima",
+    smevlabel="The SMEV model",
+    alpha=0.2,
+    xlimits: list = [1, 200],
+    ylimits: list = [0, 50],
+) -> None:
+    AMS_sort = AMS.sort_values(by=["AMS"])["AMS"]
+    plot_pos = np.arange(1, np.size(AMS_sort) + 1) / (1 + np.size(AMS_sort))
+    eRP = 1 / (1 - plot_pos)
+    if np.size(smev_RL) != 0:
+        # calculate uncertainty bounds. between 5% and 95%
+        smev_RL_up = np.quantile(smev_RL_unc, 0.95, axis=0)
+        smev_RL_low = np.quantile(smev_RL_unc, 0.05, axis=0)
+        # plot uncertainties
+        plt.fill_between(
+            RP, smev_RL_low, smev_RL_up, color=smev_colshape[-1], alpha=alpha
+        )  # SMEV
+
+       
+    plt.plot(eRP, AMS_sort, obscol_shape, label=obslabel)  # plot observed return levels
+    if np.size(smev_RL) != 0:
+        plt.plot(RP, smev_RL, smev_colshape, label=smevlabel)  # plot SMEV return lvls
+
+    plt.xscale("log")
+    plt.xlabel("return period (years)")
+    plt.legend()
+    plt.xlim(xlimits[0], xlimits[1])
+    plt.ylim(ylimits[0], ylimits[1])
+    plt.show()
