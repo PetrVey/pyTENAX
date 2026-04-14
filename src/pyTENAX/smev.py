@@ -19,9 +19,9 @@ try:
                 max_global_idx[i] = si
             else:
                 slice_len = ei - si + 1
-                # np.convolve 'same' returns max(slice_len, window_size) elements
+                # np.convolve 'same' returns max(n, m) elements centred at full_conv[i + m//2]
                 output_len = slice_len if slice_len > window_size else window_size
-                offset = (slice_len - 1) // 2 if slice_len < window_size else (window_size - 1) // 2
+                offset = window_size // 2
                 best_val = -1e300
                 best_idx = 0
                 for j in range(output_len):
