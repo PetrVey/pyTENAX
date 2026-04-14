@@ -128,6 +128,11 @@ if len(mismatch_idx) > 0:
     print(f"  2nd max:        {np.sort(conv_int)[-2]:.15f}")
     print(f"  difference:     {np.max(conv_int) - np.sort(conv_int)[-2]:.3e}")
 
+# --- First 10 events for 1440min (MATLAB comparison) ---
+print(f"\n--- First 10 ordinary events (1440 min) ---")
+df_1440 = dict_old['1440']
+print(df_1440[['oe_time', 'ordinary']].head(10).to_string(index=False))
+
 # --- Timing summary ---
 print(f"\n{'='*60}")
 print(f"{'TIMING SUMMARY — get_ordinary_events_values':^60}")

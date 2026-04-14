@@ -9,7 +9,8 @@ try:
 
     @_njit
     def _smev_inner_loop_numba(data, start_indices, end_indices, window_size, n_events):
-        max_vals = np.empty(n_events, dtype=np.float64)
+        # data must be int64 (scaled by 10000) so sums are exact — no floating-point ties
+        max_vals = np.empty(n_events, dtype=np.int64)
         max_global_idx = np.empty(n_events, dtype=np.int64)
         for i in range(n_events):
             si = start_indices[i]
@@ -19,10 +20,11 @@ try:
                 max_global_idx[i] = si
             else:
                 slice_len = ei - si + 1
-                # np.convolve 'same' returns max(n, m) elements centred at full_conv[i + m//2]
+                # np.convolve 'same' returns max(n, m) elements; numpy's start offset is (min(n,m)-1)//2
                 output_len = slice_len if slice_len > window_size else window_size
-                offset = window_size // 2
-                best_val = -1e300
+                min_len = slice_len if slice_len < window_size else window_size
+                offset = (min_len - 1) // 2
+                best_val = np.int64(-9223372036854775807)
                 best_idx = 0
                 for j in range(output_len):
                     full_idx = j + offset
@@ -32,7 +34,7 @@ try:
                     end_k = full_idx + 1
                     if end_k > slice_len:
                         end_k = slice_len
-                    s = 0.0
+                    s = np.int64(0)
                     for k in range(start_k, end_k):
                         s += data[si + k]
                     if s > best_val:
@@ -553,10 +555,13 @@ class SMEV:
         """
         dict_ordinary = {}
         dict_AMS = {}
+        # Scale data to integers so sliding-window sums are exact (no FP ties).
+        # Data is assumed to be rounded to 4 decimal places; multiply by 10000 fits in int64.
+        data_int = np.round(data * 10000).astype(np.int64)
         for d in range(len(self.durations)):
             arr_conv = np.convolve(
-                data,
-                np.ones(int(self.durations[d] / self.time_resolution), dtype=int),
+                data_int,
+                np.ones(int(self.durations[d] / self.time_resolution), dtype=np.int64),
                 "same",
             )
 
@@ -573,14 +578,14 @@ class SMEV:
 
                 # Check if start and end times are the same
                 if start_time_idx == end_time_idx:
-                    ll_val = arr_conv[start_time_idx]
+                    ll_val = arr_conv[start_time_idx] / 10000.0
                     ll_date = time_index[start_time_idx]
                 else:
                     # the +1 in end_time_index is because then we search by index but we want to includde last as well,
                     # without, it slices eg. end index is 10, without +1 it slices 0 to 9 instead of 0 to 10 (stops 1 before)
                     # get index of ll_val within the sliced array and perform convolve in this slice
-                    arr_conv2 = np.convolve(data[start_time_idx : end_time_idx + 1],
-                                            np.ones(int(self.durations[d] / self.time_resolution), dtype=int),
+                    arr_conv2 = np.convolve(data_int[start_time_idx : end_time_idx + 1],
+                                            np.ones(int(self.durations[d] / self.time_resolution), dtype=np.int64),
                                             "same",
                                         )
                     # get index of max value in convolve vector
@@ -588,7 +593,7 @@ class SMEV:
 
                     # adjust the index to refer to the original arr_conv
                     ll_idx_in_arr_conv = start_time_idx + ll_idx_in_slice
-                    ll_val = arr_conv2[ll_idx_in_slice]
+                    ll_val = arr_conv2[ll_idx_in_slice] / 10000.0
                     ll_date = time_index[ll_idx_in_arr_conv]
 
                 ll_vals.append(ll_val)
@@ -649,6 +654,9 @@ class SMEV:
         unique_years = np.unique(ll_yrs)
         year_masks = {yr: ll_yrs == yr for yr in unique_years}
 
+        # Scale data to integers so sliding-window sums are exact (no FP ties).
+        data_int = np.round(data * 10000).astype(np.int64)
+
         for d in range(len(self.durations)):
             window_size = int(self.durations[d] / self.time_resolution)
             ones_kernel = np.ones(window_size, dtype=np.int64)
@@ -662,12 +670,12 @@ class SMEV:
                 ei = end_indices[i]
 
                 if si == ei:
-                    max_vals[i] = data[si]
+                    max_vals[i] = data_int[si] / 10000.0
                     max_global_idx[i] = si
                 else:
-                    arr_conv2 = np.convolve(data[si:ei + 1], ones_kernel, "same")
+                    arr_conv2 = np.convolve(data_int[si:ei + 1], ones_kernel, "same")
                     ll_idx_in_slice = np.nanargmax(arr_conv2)
-                    max_vals[i] = arr_conv2[ll_idx_in_slice]
+                    max_vals[i] = arr_conv2[ll_idx_in_slice] / 10000.0
                     max_global_idx[i] = si + ll_idx_in_slice
 
             ll_dates_arr = time_index[max_global_idx]
@@ -716,14 +724,16 @@ class SMEV:
         unique_years = np.unique(ll_yrs)
         year_masks = {yr: ll_yrs == yr for yr in unique_years}
 
-        data_f64 = data.astype(np.float64)
+        # Scale data to integers so sliding-window sums are exact (no FP ties).
+        data_int = np.round(data * 10000).astype(np.int64)
 
         for d in range(len(self.durations)):
             window_size = int(self.durations[d] / self.time_resolution)
 
-            max_vals, max_global_idx = _smev_inner_loop_numba(
-                data_f64, start_indices, end_indices, window_size, n_events
+            max_vals_int, max_global_idx = _smev_inner_loop_numba(
+                data_int, start_indices, end_indices, window_size, n_events
             )
+            max_vals = max_vals_int / 10000.0
 
             ll_dates_arr = time_index[max_global_idx]
             ams_vals = np.array([np.max(max_vals[mask]) for yr, mask in year_masks.items()])
