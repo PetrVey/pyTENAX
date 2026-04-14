@@ -10,7 +10,7 @@ S_SMEV = smev.SMEV(
     return_period=[2, 5, 10, 20, 50, 100, 200],
     durations=[10, 60, 180, 360, 720, 1440],
     time_resolution=10,
-    min_rain=0.1,
+    min_rain=0,
     storm_separation_time=24,
     min_event_duration=30,
     left_censoring=[0.9, 1],
@@ -132,6 +132,11 @@ if len(mismatch_idx) > 0:
 print(f"\n--- First 10 ordinary events (1440 min) ---")
 df_1440 = dict_old['1440']
 print(df_1440[['oe_time', 'ordinary']].head(10).to_string(index=False))
+
+
+print(f"\n--- First 10 ordinary events (10 min) ---")
+df_10 = dict_old['10']
+print(df_10[['oe_time', 'ordinary']].head(10).to_string(index=False))
 
 # --- Timing summary ---
 print(f"\n{'='*60}")
