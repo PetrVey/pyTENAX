@@ -227,12 +227,12 @@ class SMEV:
 
         return consecutive_values
         
-def get_ordinary_events_new(
+    def get_ordinary_events_new(
         self,
         data: np.ndarray,
         dates: np.ndarray,
         check_gaps=True,
-    ) -> list:
+        ) -> list:
         """Vectorized ordinary event extraction using np.diff + np.split.
  
         Functionally equivalent to `get_ordinary_events` (numpy branch) but
@@ -510,76 +510,76 @@ def get_ordinary_events_new(
 
         return dict_ordinary, dict_AMS
 
-def get_ordinary_events_values_new(self_durations, self_time_resolution,
-                                    data, dates, arr_dates_oe):
-    """Optimized version of get_ordinary_events_values.
-    
-    Uses np.convolve per event (for exact match with original),
-    but optimizes:
-    - searchsorted batched once for all durations
-    - years precomputed once
-    - pre-allocated output arrays instead of list.append
-    - vectorized AMS with numpy groupby-style ops
-    """
-    dict_ordinary = {}
-    dict_AMS = {}
+    def get_ordinary_events_values_new(self_durations, self_time_resolution,
+                                        data, dates, arr_dates_oe):
+        """Optimized version of get_ordinary_events_values.
+        
+        Uses np.convolve per event (for exact match with original),
+        but optimizes:
+        - searchsorted batched once for all durations
+        - years precomputed once
+        - pre-allocated output arrays instead of list.append
+        - vectorized AMS with numpy groupby-style ops
+        """
+        dict_ordinary = {}
+        dict_AMS = {}
 
-    time_index = dates.reshape(-1)
-    n_events = arr_dates_oe.shape[0]
+        time_index = dates.reshape(-1)
+        n_events = arr_dates_oe.shape[0]
 
-    # Batch searchsorted (once for all durations)
-    oe_end = arr_dates_oe[:, 0].astype("datetime64[ns]")
-    oe_start = arr_dates_oe[:, 1].astype("datetime64[ns]")
-    start_indices = np.searchsorted(time_index, oe_start)
-    end_indices = np.searchsorted(time_index, oe_end)
+        # Batch searchsorted (once for all durations)
+        oe_end = arr_dates_oe[:, 0].astype("datetime64[ns]")
+        oe_start = arr_dates_oe[:, 1].astype("datetime64[ns]")
+        start_indices = np.searchsorted(time_index, oe_start)
+        end_indices = np.searchsorted(time_index, oe_end)
 
-    # Precompute years (once for all durations)
-    ll_yrs = np.array([
-        oe_end[i].astype("datetime64[Y]").item().year
-        for i in range(n_events)
-    ], dtype=np.int64)
+        # Precompute years (once for all durations)
+        ll_yrs = np.array([
+            oe_end[i].astype("datetime64[Y]").item().year
+            for i in range(n_events)
+        ], dtype=np.int64)
 
-    # Precompute unique years and masks for AMS
-    unique_years = np.unique(ll_yrs)
-    year_masks = {yr: ll_yrs == yr for yr in unique_years}
+        # Precompute unique years and masks for AMS
+        unique_years = np.unique(ll_yrs)
+        year_masks = {yr: ll_yrs == yr for yr in unique_years}
 
-    for d in range(len(self_durations)):
-        window_size = int(self_durations[d] / self_time_resolution)
-        ones_kernel = np.ones(window_size, dtype=np.int64)
+        for d in range(len(self_durations)):
+            window_size = int(self_durations[d] / self_time_resolution)
+            ones_kernel = np.ones(window_size, dtype=np.int64)
 
-        # Pre-allocate arrays
-        max_vals = np.empty(n_events, dtype=np.float64)
-        max_global_idx = np.empty(n_events, dtype=np.int64)
+            # Pre-allocate arrays
+            max_vals = np.empty(n_events, dtype=np.float64)
+            max_global_idx = np.empty(n_events, dtype=np.int64)
 
-        for i in range(n_events):
-            si = start_indices[i]
-            ei = end_indices[i]
+            for i in range(n_events):
+                si = start_indices[i]
+                ei = end_indices[i]
 
-            if si == ei:
-                max_vals[i] = data[si]
-                max_global_idx[i] = si
-            else:
-                arr_conv2 = np.convolve(data[si:ei + 1], ones_kernel, "same")
-                ll_idx_in_slice = np.nanargmax(arr_conv2)
-                max_vals[i] = arr_conv2[ll_idx_in_slice]
-                max_global_idx[i] = si + ll_idx_in_slice
+                if si == ei:
+                    max_vals[i] = data[si]
+                    max_global_idx[i] = si
+                else:
+                    arr_conv2 = np.convolve(data[si:ei + 1], ones_kernel, "same")
+                    ll_idx_in_slice = np.nanargmax(arr_conv2)
+                    max_vals[i] = arr_conv2[ll_idx_in_slice]
+                    max_global_idx[i] = si + ll_idx_in_slice
 
-        ll_dates_arr = time_index[max_global_idx]
+            ll_dates_arr = time_index[max_global_idx]
 
-        # Vectorized AMS
-        ams_vals = np.array([np.max(max_vals[mask]) for yr, mask in year_masks.items()])
+            # Vectorized AMS
+            ams_vals = np.array([np.max(max_vals[mask]) for yr, mask in year_masks.items()])
 
-        df_ams = pd.DataFrame({"year": unique_years, "AMS": ams_vals})
-        df_oe = pd.DataFrame({
-            "year": ll_yrs,
-            "oe_time": ll_dates_arr,
-            "ordinary": max_vals,
-        })
-        dict_AMS[f"{self_durations[d]}"] = df_ams
-        dict_ordinary[f"{self_durations[d]}"] = df_oe
+            df_ams = pd.DataFrame({"year": unique_years, "AMS": ams_vals})
+            df_oe = pd.DataFrame({
+                "year": ll_yrs,
+                "oe_time": ll_dates_arr,
+                "ordinary": max_vals,
+            })
+            dict_AMS[f"{self_durations[d]}"] = df_ams
+            dict_ordinary[f"{self_durations[d]}"] = df_oe
 
-    return dict_ordinary, dict_AMS
-    
+        return dict_ordinary, dict_AMS
+        
 
     def estimate_smev_parameters(
         self, ordinary_events: Union[np.ndarray, pd.Series, list], data_portion: list[Tuple[int, float]]

@@ -305,7 +305,7 @@ def weibul_test_MC(ordinary_events_df: pd.DataFrame,
     If not all thresholds rejected, (1-optimal_threshold) is the portion of the record that can be assumed to be
     distributed Weibull.
     
-    ⚠️ Warning:
+    Warning:
     If the returned optimal_threshold == 1.0, this does not necessarily mean that 
     all thresholds failed. It may indicate that your tested threshold range 
     extended too high (e.g., up to 0.95 or higher), where results are dominated 
