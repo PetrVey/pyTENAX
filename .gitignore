@@ -148,3 +148,8 @@ meta/*.csv
 #R
 **.Rhistory
 **.Rapp.history
+
+#vs code setting not tracked
+.vscode/
+#claude code setting not tracked
+.claude/
