@@ -4,6 +4,49 @@ import pandas as pd
 from typing import Union, Tuple, Dict
 import statsmodels.api as sm
 
+try:
+    from numba import njit as _njit
+
+    @_njit
+    def _smev_inner_loop_numba(data, start_indices, end_indices, window_size, n_events):
+        max_vals = np.empty(n_events, dtype=np.float64)
+        max_global_idx = np.empty(n_events, dtype=np.int64)
+        for i in range(n_events):
+            si = start_indices[i]
+            ei = end_indices[i]
+            if si == ei:
+                max_vals[i] = data[si]
+                max_global_idx[i] = si
+            else:
+                slice_len = ei - si + 1
+                # np.convolve 'same' returns max(slice_len, window_size) elements
+                output_len = slice_len if slice_len > window_size else window_size
+                offset = (slice_len - 1) // 2 if slice_len < window_size else (window_size - 1) // 2
+                best_val = -1e300
+                best_idx = 0
+                for j in range(output_len):
+                    full_idx = j + offset
+                    start_k = full_idx - (window_size - 1)
+                    if start_k < 0:
+                        start_k = 0
+                    end_k = full_idx + 1
+                    if end_k > slice_len:
+                        end_k = slice_len
+                    s = 0.0
+                    for k in range(start_k, end_k):
+                        s += data[si + k]
+                    if s > best_val:
+                        best_val = s
+                        best_idx = j
+                max_vals[i] = best_val
+                max_global_idx[i] = si + best_idx
+        return max_vals, max_global_idx
+
+    _NUMBA_AVAILABLE = True
+
+except ImportError:
+    _NUMBA_AVAILABLE = False
+
 
 class SMEV:
     def __init__(
@@ -229,22 +272,26 @@ class SMEV:
         
     def get_ordinary_events_new(
         self,
-        data: np.ndarray,
+        data: Union[pd.DataFrame, np.ndarray],
         dates: np.ndarray,
+        name_col: str = "value",
         check_gaps=True,
         ) -> list:
         """Vectorized ordinary event extraction using np.diff + np.split.
- 
+
         Functionally equivalent to `get_ordinary_events` (numpy branch) but
         significantly faster by replacing the Python for-loop with vectorized
         numpy operations.
- 
+
         Args:
-            data (np.ndarray): Array with precipitation values.
+            data (Union[pd.DataFrame, np.ndarray]): Data with precipitation values.
+                DataFrame support is deprecated and will be removed in a future version.
             dates (np.ndarray): Array with dates of precipitation values. dtype must be datetime64[ns].
+            name_col (str, optional): Column name in `data` for precipitation values.
+                Only relevant if `data` is a DataFrame. Defaults to "value".
             check_gaps (bool, optional): Check for gaps in precipitation time series.
                 Defaults to True.
- 
+
         Returns:
             list: Consecutive values above `self.min_rain` separated by more than `self.storm_separation_time`.
         """
@@ -254,7 +301,10 @@ class SMEV:
                 "If you are sure your data is complete, set "
                 "self.__incomplete_years_removed__ = True to bypass this check."
             )
- 
+
+        if isinstance(data, pd.DataFrame):
+            data = np.array(data[name_col])
+
         above_threshold_indices = np.where(data > self.min_rain)[0]
  
         if len(above_threshold_indices) == 0:
@@ -421,7 +471,64 @@ class SMEV:
             n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
 
         return arr_vals, arr_dates, n_ordinary_per_year
-        
+
+
+    def remove_short_new(
+        self, list_ordinary: list
+    ) -> Tuple[np.ndarray, np.ndarray, pd.Series]:
+        """Function that removes ordinary events that are too short.
+
+        Functionally equivalent to `remove_short` (numpy branch) but handles
+        pd.Timestamp input by converting to np.datetime64 upfront, so only
+        one code path is needed.
+
+        Args:
+            list_ordinary (list): list of ordinary events as returned by
+                `get_ordinary_events()` or `get_ordinary_events_new()`.
+                Each event may contain pd.Timestamp or np.datetime64 values.
+
+        Returns:
+            arr_vals (np.ndarray): Array with indices of events that are not too short.
+            arr_dates (np.ndarray): Array with tuple consisting of start and end dates of events that are not too short.
+            n_ordinary_per_year (pd.Series): Series with the number of ordinary events per year.
+        """
+        if not self.__incomplete_years_removed__:
+            raise ValueError(
+                "You must run 'remove_incomplete_years' before running this function. "
+                "If you are sure your data is complete, set "
+                "self.__incomplete_years_removed__ = True to bypass this check."
+            )
+
+        # Convert pd.Timestamp events to np.datetime64 if needed
+        if isinstance(list_ordinary[0][0], pd.Timestamp):
+            list_ordinary = [
+                np.array([t.to_datetime64() for t in ev]) for ev in list_ordinary
+            ]
+
+        min_duration = np.timedelta64(int(self.min_event_duration), "m")
+        time_res = np.timedelta64(int(self.time_resolution), "m")
+
+        ll_short = [
+            (ev[-1] - ev[0]).astype("timedelta64[m]") + time_res >= min_duration
+            for ev in list_ordinary
+        ]
+        ll_dates = [
+            (ev[-1], ev[0]) if keep else (np.nan, np.nan)
+            for ev, keep in zip(list_ordinary, ll_short)
+        ]
+
+        arr_vals = np.array(ll_short)[ll_short]
+        arr_dates = np.array(ll_dates)[ll_short]
+
+        filtered_list = [ev for ev, keep in zip(list_ordinary, ll_short) if keep]
+        list_year = pd.DataFrame(
+            [ev[0].astype("datetime64[Y]").item().year for ev in filtered_list],
+            columns=["year"],
+        )
+        n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
+
+        return arr_vals, arr_dates, n_ordinary_per_year
+
 
     def get_ordinary_events_values(
         self, data: np.ndarray, dates: np.ndarray, arr_dates_oe
@@ -510,10 +617,9 @@ class SMEV:
 
         return dict_ordinary, dict_AMS
 
-    def get_ordinary_events_values_new(self_durations, self_time_resolution,
-                                        data, dates, arr_dates_oe):
+    def get_ordinary_events_values_new(self, data, dates, arr_dates_oe):
         """Optimized version of get_ordinary_events_values.
-        
+
         Uses np.convolve per event (for exact match with original),
         but optimizes:
         - searchsorted batched once for all durations
@@ -543,8 +649,8 @@ class SMEV:
         unique_years = np.unique(ll_yrs)
         year_masks = {yr: ll_yrs == yr for yr in unique_years}
 
-        for d in range(len(self_durations)):
-            window_size = int(self_durations[d] / self_time_resolution)
+        for d in range(len(self.durations)):
+            window_size = int(self.durations[d] / self.time_resolution)
             ones_kernel = np.ones(window_size, dtype=np.int64)
 
             # Pre-allocate arrays
@@ -575,11 +681,64 @@ class SMEV:
                 "oe_time": ll_dates_arr,
                 "ordinary": max_vals,
             })
-            dict_AMS[f"{self_durations[d]}"] = df_ams
-            dict_ordinary[f"{self_durations[d]}"] = df_oe
+            dict_AMS[f"{self.durations[d]}"] = df_ams
+            dict_ordinary[f"{self.durations[d]}"] = df_oe
 
         return dict_ordinary, dict_AMS
-        
+
+
+    def get_ordinary_events_values_new_numba(self, data, dates, arr_dates_oe):
+        """Numba-accelerated version of get_ordinary_events_values.
+
+        Replaces the per-event np.convolve with a JIT-compiled inner loop
+        using cumsum-based sliding window sums (O(1) per position instead of
+        O(window_size)). Requires numba to be installed.
+        """
+        if not _NUMBA_AVAILABLE:
+            raise ImportError("numba is required for this function. Install with: pip install numba")
+
+        dict_ordinary = {}
+        dict_AMS = {}
+
+        time_index = dates.reshape(-1)
+        n_events = arr_dates_oe.shape[0]
+
+        oe_end = arr_dates_oe[:, 0].astype("datetime64[ns]")
+        oe_start = arr_dates_oe[:, 1].astype("datetime64[ns]")
+        start_indices = np.searchsorted(time_index, oe_start).astype(np.int64)
+        end_indices = np.searchsorted(time_index, oe_end).astype(np.int64)
+
+        ll_yrs = np.array([
+            oe_end[i].astype("datetime64[Y]").item().year
+            for i in range(n_events)
+        ], dtype=np.int64)
+
+        unique_years = np.unique(ll_yrs)
+        year_masks = {yr: ll_yrs == yr for yr in unique_years}
+
+        data_f64 = data.astype(np.float64)
+
+        for d in range(len(self.durations)):
+            window_size = int(self.durations[d] / self.time_resolution)
+
+            max_vals, max_global_idx = _smev_inner_loop_numba(
+                data_f64, start_indices, end_indices, window_size, n_events
+            )
+
+            ll_dates_arr = time_index[max_global_idx]
+            ams_vals = np.array([np.max(max_vals[mask]) for yr, mask in year_masks.items()])
+
+            df_ams = pd.DataFrame({"year": unique_years, "AMS": ams_vals})
+            df_oe = pd.DataFrame({
+                "year": ll_yrs,
+                "oe_time": ll_dates_arr,
+                "ordinary": max_vals,
+            })
+            dict_AMS[f"{self.durations[d]}"] = df_ams
+            dict_ordinary[f"{self.durations[d]}"] = df_oe
+
+        return dict_ordinary, dict_AMS
+
 
     def estimate_smev_parameters(
         self, ordinary_events: Union[np.ndarray, pd.Series, list], data_portion: list[Tuple[int, float]]
