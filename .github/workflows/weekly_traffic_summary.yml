@@ -1,0 +1,74 @@
+name: Weekly Traffic Summary
+
+on:
+  schedule:
+    - cron: "0 0 * * 0"  # every Sunday at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  weekly-summary:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout traffic-data branch
+        uses: actions/checkout@v4
+        with:
+          ref: traffic-data
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Sum traffic data from JSON files
+        run: |
+          views_count=$(jq '[.[].count // 0] | add // 0' traffic-views.json)
+          views_uniques=$(jq '[.[].uniques // 0] | add // 0' traffic-views.json)
+          clones_count=$(jq '[.[].count // 0] | add // 0' traffic-clones.json)
+          clones_uniques=$(jq '[.[].uniques // 0] | add // 0' traffic-clones.json)
+
+          echo "views_count=$views_count"     >> $GITHUB_ENV
+          echo "views_uniques=$views_uniques" >> $GITHUB_ENV
+          echo "clones_count=$clones_count"   >> $GITHUB_ENV
+          echo "clones_uniques=$clones_uniques" >> $GITHUB_ENV
+
+      - name: Read current totals from README.rst
+        run: |
+          prev_views=$(grep "^- Total Views:"        README.rst | grep -o '[0-9]*')
+          prev_views_u=$(grep "^- Total Unique Views:" README.rst | grep -o '[0-9]*')
+          prev_clones=$(grep "^- Total Clones:"       README.rst | grep -o '[0-9]*')
+          prev_clones_u=$(grep "^- Total Unique Clones:" README.rst | grep -o '[0-9]*')
+
+          echo "prev_views=${prev_views:-0}"       >> $GITHUB_ENV
+          echo "prev_views_u=${prev_views_u:-0}"   >> $GITHUB_ENV
+          echo "prev_clones=${prev_clones:-0}"     >> $GITHUB_ENV
+          echo "prev_clones_u=${prev_clones_u:-0}" >> $GITHUB_ENV
+
+      - name: Compute new running totals
+        run: |
+          echo "new_views=$((${{ env.prev_views }} + ${{ env.views_count }}))"         >> $GITHUB_ENV
+          echo "new_views_u=$((${{ env.prev_views_u }} + ${{ env.views_uniques }}))"   >> $GITHUB_ENV
+          echo "new_clones=$((${{ env.prev_clones }} + ${{ env.clones_count }}))"      >> $GITHUB_ENV
+          echo "new_clones_u=$((${{ env.prev_clones_u }} + ${{ env.clones_uniques }}))" >> $GITHUB_ENV
+
+      - name: Update README.rst with new totals
+        run: |
+          sed -i "s/^- Total Views: .*$/- Total Views: ${{ env.new_views }}/"                 README.rst
+          sed -i "s/^- Total Unique Views: .*$/- Total Unique Views: ${{ env.new_views_u }}/" README.rst
+          sed -i "s/^- Total Clones: .*$/- Total Clones: ${{ env.new_clones }}/"              README.rst
+          sed -i "s/^- Total Unique Clones: .*$/- Total Unique Clones: ${{ env.new_clones_u }}/" README.rst
+
+      - name: Reset JSON files
+        run: |
+          echo "[]" > traffic-views.json
+          echo "[]" > traffic-clones.json
+
+      - name: Commit and push
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add traffic-views.json traffic-clones.json README.rst
+          git diff --cached --quiet || git commit -m "Weekly traffic summary $(date -I)"
+          git push https://$PAT_TOKEN@github.com/PetrVey/pyTENAX.git traffic-data
