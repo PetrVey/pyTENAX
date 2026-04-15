@@ -26,6 +26,13 @@ All tutorial Jupyter notebooks can be launched interactively via Binder by click
      `Binder Tutorial 03 <https://mybinder.org/v2/gh/PetrVey/pyTENAX/main?urlpath=%2Fdoc%2Ftree%2Fdocs%2Fsource%2Ftutorials%2FTutorial_03.ipynb>`_.
 
 
+- `Tutorial 04: SMEV — Simplified Metastatistical Extreme Value formulation <Tutorial_04.ipynb>`_
+
+  .. note::
+     This tutorial can also be launched interactively via
+     `Binder Tutorial 04 <https://mybinder.org/v2/gh/PetrVey/pyTENAX/main?urlpath=%2Fdoc%2Ftree%2Fdocs%2Fsource%2Ftutorials%2FTutorial_04.ipynb>`_.
+
+
 Note that we also have example file that follows MATLAB example file and creates similar plots as in TENAX manuscript
 `Example python script <https://github.com/PetrVey/pyTENAX/blob/6dd44bee49f4e448f2ee08710e3b4356c88ac6b7/example/test_tenax.py>`_.
 
@@ -36,3 +43,4 @@ Note that we also have example file that follows MATLAB example file and creates
    Tutorial_01.ipynb
    Tutorial_02.ipynb
    Tutorial_03.ipynb
+   Tutorial_04.ipynb
