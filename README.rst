@@ -122,6 +122,16 @@ Thank you for helping us improve!
 [Open an Issue](https://github.com/PetrVey/pyTENAX/issues/new)
 
 
+GitHub Traffic Statistics
+-------------------------
+- Total Views: 264
+- Total Unique Views: 20
+- Total Clones: 71
+- Total Unique Clones: 47
+
+*Updated weekly by GitHub Actions.*
+
+
 Credits
 -------
-We wish to thank Riccardo Ciceri riccardo.ciceri@studenti.unipd.it for the first stage in developing pyTENAX 
+We wish to thank Riccardo Ciceri riccardo.ciceri@studenti.unipd.it for the first stage in developing pyTENAX
