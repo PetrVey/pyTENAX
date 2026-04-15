@@ -2,7 +2,7 @@
 PyTENAX
 =================
 
-| **PyTENAX contains a set of methods to apply the Non-Asymptotic statistical model for eXtreme return levels (TENAX).**
+| **PyTENAX contains a set of methods to apply the TEmperature-dependent Non-Asymptotic statistical model for eXtreme return levels (TENAX).**
 | Presented in manuscript:
 | Marra, F., Koukoula, M., Canale, A., & Peleg, N. (2023). 
 | Predicting extreme sub-hourly precipitation intensification based on temperature shifts. 
