@@ -1,9 +1,17 @@
 from importlib.resources import files
 import numpy as np
 import pandas as pd
-import timeit
+import time
 from pyTENAX import smev
-from decimal import Decimal
+
+try:
+    import psutil
+    import os
+    _HAS_PSUTIL = True
+    _proc = psutil.Process(os.getpid())
+except ImportError:
+    _HAS_PSUTIL = False
+    print("psutil not installed — per-core CPU stats unavailable. Run: pip install psutil")
 
 # --- Setup ---
 S_SMEV = smev.SMEV(
@@ -23,128 +31,78 @@ data.set_index("prec_time", inplace=True)
 name_col = "prec_values"
 
 data = S_SMEV.remove_incomplete_years(data, name_col)
-df_arr = np.round(np.array(data[name_col]), 4) 
+df_arr = np.round(np.array(data[name_col]), 4)
 df_dates = np.array(data.index)
 
-# --- Storm separation (new pipeline) ---
+# --- Storm separation ---
 idx_ordinary = S_SMEV.get_ordinary_events_new(data=df_arr, dates=df_dates, check_gaps=False)
 arr_vals, arr_dates, n_per_year = S_SMEV.remove_short_new(idx_ordinary)
 print(f"Storm separation done: {len(arr_vals)} events")
 
 # --- Warmup numba (first call triggers JIT compilation) ---
 print("Warming up numba JIT (first call compiles)...")
-_ = S_SMEV.get_ordinary_events_values_new_numba(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates)
+_ = S_SMEV.get_ordinary_events_values_v2(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates, method="njit")
+_ = S_SMEV.get_ordinary_events_values_v2(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates, method="njit_parallel")
 print("Warmup done.")
 
-N = 1
+N = 100
+
+def bench(fn, n):
+    """Run fn n times; return (wall_s, cpu_s, cpu_pct)."""
+    if _HAS_PSUTIL:
+        _proc.cpu_percent()  # discard first dummy reading
+    t_wall0 = time.perf_counter()
+    t_cpu0  = time.process_time()
+    for _ in range(n):
+        fn()
+    t_cpu1  = time.process_time()
+    t_wall1 = time.perf_counter()
+    cpu_pct = _proc.cpu_percent(interval=None) if _HAS_PSUTIL else float("nan")
+    return t_wall1 - t_wall0, t_cpu1 - t_cpu0, cpu_pct
 
 # --- Benchmark ---
-time_old = timeit.timeit(
-    lambda: S_SMEV.get_ordinary_events_values(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates),
-    number=N
-)
-time_new = timeit.timeit(
-    lambda: S_SMEV.get_ordinary_events_values_new(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates),
-    number=N
-)
-time_numba = timeit.timeit(
-    lambda: S_SMEV.get_ordinary_events_values_new_numba(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates),
-    number=N
-)
+wall_old,      cpu_old,      pct_old      = bench(lambda: S_SMEV.get_ordinary_events_values(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates), N)
+wall_vec,      cpu_vec,      pct_vec      = bench(lambda: S_SMEV.get_ordinary_events_values_v2(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates, method="vectorized"), N)
+wall_njit,     cpu_njit,     pct_njit     = bench(lambda: S_SMEV.get_ordinary_events_values_v2(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates, method="njit"), N)
+wall_njit_par, cpu_njit_par, pct_njit_par = bench(lambda: S_SMEV.get_ordinary_events_values_v2(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates, method="njit_parallel"), N)
 
 # --- Get outputs for comparison ---
-dict_old,   dict_AMS_old   = S_SMEV.get_ordinary_events_values(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates)
-dict_new,   dict_AMS_new   = S_SMEV.get_ordinary_events_values_new(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates)
-dict_numba, dict_AMS_numba = S_SMEV.get_ordinary_events_values_new_numba(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates)
+dict_old     , _ = S_SMEV.get_ordinary_events_values(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates)
+dict_vec     , _ = S_SMEV.get_ordinary_events_values_v2(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates, method="vectorized")
+dict_njit    , _ = S_SMEV.get_ordinary_events_values_v2(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates, method="njit")
+dict_njit_par, _ = S_SMEV.get_ordinary_events_values_v2(data=df_arr, dates=df_dates, arr_dates_oe=arr_dates, method="njit_parallel")
 
-# --- Exact diff check ---
-print(f"\n--- get_ordinary_events_values: output check ---")
+# --- Output check vs old ---
+print(f"\n--- Output check vs get_ordinary_events_values (old) ---")
 for dur in [str(d) for d in S_SMEV.durations]:
-    oe_old   = dict_old[dur]['ordinary'].to_numpy()
-    oe_new   = dict_new[dur]['ordinary'].to_numpy()
-    oe_numba = dict_numba[dur]['ordinary'].to_numpy()
-    time_old_arr   = dict_old[dur]['oe_time'].to_numpy()
-    time_new_arr   = dict_new[dur]['oe_time'].to_numpy()
-    time_numba_arr = dict_numba[dur]['oe_time'].to_numpy()
-
-    new_val_diff   = np.max(np.abs(oe_old - oe_new))
-    numba_val_diff = np.max(np.abs(oe_old - oe_numba))
-    new_time_match   = np.array_equal(time_old_arr, time_new_arr)
-    numba_time_match = np.array_equal(time_old_arr, time_numba_arr)
-    numba_time_mismatch_count = np.sum(time_old_arr != time_numba_arr)
-
-    print(f"  {dur:>4} min — "
-          f"new: val diff={new_val_diff:.2e} time match={new_time_match} | "
-          f"numba: val diff={numba_val_diff:.2e} time match={numba_time_match} (mismatches={numba_time_mismatch_count}/{len(time_old_arr)})")
-
-# --- Debug: find first mismatching event for 60min ---
-dur_dbg = "60"
-time_new_dbg   = dict_new[dur_dbg]['oe_time'].to_numpy()
-time_numba_dbg = dict_numba[dur_dbg]['oe_time'].to_numpy()
-mismatch_idx = np.where(time_new_dbg != time_numba_dbg)[0]
-
-if len(mismatch_idx) > 0:
-    ev_i = mismatch_idx[0]
-    oe_end_arr   = arr_dates[:, 0].astype("datetime64[ns]")
-    oe_start_arr = arr_dates[:, 1].astype("datetime64[ns]")
-    time_index = df_dates.reshape(-1)
-    si = int(np.searchsorted(time_index, oe_start_arr[ev_i]))
-    ei = int(np.searchsorted(time_index, oe_end_arr[ev_i]))
-    window_size = int(60 / S_SMEV.time_resolution)
-    ones_int   = np.ones(window_size, dtype=np.int64)
-    ones_float = np.ones(window_size, dtype=np.float64)
-
-    event_slice = df_arr[si:ei + 1].astype(np.float64)
-    conv_int   = np.convolve(event_slice, ones_int,   'same')
-    conv_float = np.convolve(event_slice, ones_float, 'same')
-
-    half_left  = window_size // 2
-    half_right = (window_size - 1) // 2
-    n = len(event_slice)
-    conv_manual = np.zeros(n)
-    for j in range(n):
-        start_k = max(0, j - half_left)
-        end_k   = min(n, j + half_right + 1)
-        s = 0.0
-        for k in range(start_k, end_k):
-            s += event_slice[k]
-        conv_manual[j] = s
-
-    idx_int    = int(np.argmax(conv_int))
-    idx_float  = int(np.argmax(conv_float))
-    idx_manual = int(np.argmax(conv_manual))
-
-    print(f"\n--- Debug mismatch event {ev_i} (60min, slice len={n}) ---")
-    print(f"np.convolve int64 kernel  argmax: {idx_int}  val={conv_int[idx_int]:.15f}")
-    print(f"np.convolve float64 kernel argmax: {idx_float}  val={conv_float[idx_float]:.15f}")
-    print(f"manual loop argmax:               {idx_manual}  val={conv_manual[idx_manual]:.15f}")
-    print(f"--- values at both indices ---")
-    for idx in sorted(set([idx_int, idx_float, idx_manual])):
-        diff_int_manual = conv_int[idx] - conv_manual[idx]
-        print(f"  idx {idx}: int={conv_int[idx]:.15f}  float={conv_float[idx]:.15f}  manual={conv_manual[idx]:.15f}  (int-manual={diff_int_manual:+.3e})")
-    print(f"event slice values: {event_slice}")
-    print(f"--- checking if this is truly a flat/tied event ---")
-    print(f"  max conv value: {np.max(conv_int):.15f}")
-    print(f"  2nd max:        {np.sort(conv_int)[-2]:.15f}")
-    print(f"  difference:     {np.max(conv_int) - np.sort(conv_int)[-2]:.3e}")
+    oe_old = dict_old[dur]['ordinary'].to_numpy()
+    t_old  = dict_old[dur]['oe_time'].to_numpy()
+    for label, d in [("vectorized", dict_vec), ("njit", dict_njit), ("njit_par", dict_njit_par)]:
+        val_diff   = np.max(np.abs(oe_old - d[dur]['ordinary'].to_numpy()))
+        time_match = np.array_equal(t_old, d[dur]['oe_time'].to_numpy())
+        print(f"  {dur:>4} min  {label:<12} val diff={val_diff:.2e}  time match={time_match}")
 
 # --- First 10 events for 1440min (MATLAB comparison) ---
 print(f"\n--- First 10 ordinary events (1440 min) ---")
-df_1440 = dict_old['1440']
-print(df_1440[['oe_time', 'ordinary']].head(10).to_string(index=False))
-
+print(dict_old['1440'][['oe_time', 'ordinary']].head(10).to_string(index=False))
 
 print(f"\n--- First 10 ordinary events (10 min) ---")
-df_10 = dict_old['10']
-print(df_10[['oe_time', 'ordinary']].head(10).to_string(index=False))
+print(dict_old['10'][['oe_time', 'ordinary']].head(10).to_string(index=False))
 
 # --- Timing summary ---
-print(f"\n{'='*60}")
-print(f"{'TIMING SUMMARY — get_ordinary_events_values':^60}")
-print(f"{'='*60}")
-print(f"{'Version':<20} {'Mean time (ms)':>15} {'Speedup vs old':>15}")
-print(f"{'-'*60}")
-print(f"{'old':<20} {time_old/N*1000:>15.3f} {'—':>15}")
-print(f"{'new':<20} {time_new/N*1000:>15.3f} {time_old/time_new:>14.1f}x")
-print(f"{'numba':<20} {time_numba/N*1000:>15.3f} {time_old/time_numba:>14.1f}x")
-print(f"{'='*60}")
+print(f"\n{'='*72}")
+print(f"{'TIMING SUMMARY — get_ordinary_events_values':^72}")
+print(f"{'='*72}")
+print(f"{'Version':<16} {'Wall ms':>10} {'CPU ms':>10} {'CPU/Wall':>10} {'CPU%':>8} {'Speedup':>10}")
+print(f"{'-'*72}")
+for label, wall, cpu, pct in [
+    ("old",           wall_old,      cpu_old,      pct_old),
+    ("v2 vectorized", wall_vec,      cpu_vec,      pct_vec),
+    ("v2 njit",       wall_njit,     cpu_njit,     pct_njit),
+    ("v2 njit_par",   wall_njit_par, cpu_njit_par, pct_njit_par),
+]:
+    speedup = f"{wall_old/wall:.1f}x" if label != "old" else "—"
+    cpu_wall_ratio = cpu / wall if wall > 0 else float("nan")
+    print(f"{label:<16} {wall/N*1000:>10.3f} {cpu/N*1000:>10.3f} {cpu_wall_ratio:>10.2f} {pct:>7.1f}% {speedup:>10}")
+print(f"{'='*72}")
+print("CPU/Wall > 1.0 means multiple threads/cores used (njit_parallel).")

@@ -5,14 +5,49 @@ from typing import Union, Tuple, Dict
 import statsmodels.api as sm
 
 try:
-    from numba import njit as _njit
+    from numba import njit as _njit, prange as _prange
 
     @_njit
+    def _smev_inner_loop_numba_seq(data, start_indices, end_indices, window_size, n_events):
+        max_vals = np.empty(n_events, dtype=np.int64)
+        max_global_idx = np.empty(n_events, dtype=np.int64)
+        for i in range(n_events):
+            si = start_indices[i]
+            ei = end_indices[i]
+            if si == ei:
+                max_vals[i] = data[si]
+                max_global_idx[i] = si
+            else:
+                slice_len = ei - si + 1
+                output_len = slice_len if slice_len > window_size else window_size
+                min_len = slice_len if slice_len < window_size else window_size
+                offset = (min_len - 1) // 2
+                best_val = np.int64(-9223372036854775807)
+                best_idx = 0
+                for j in range(output_len):
+                    full_idx = j + offset
+                    start_k = full_idx - (window_size - 1)
+                    if start_k < 0:
+                        start_k = 0
+                    end_k = full_idx + 1
+                    if end_k > slice_len:
+                        end_k = slice_len
+                    s = np.int64(0)
+                    for k in range(start_k, end_k):
+                        s += data[si + k]
+                    if s > best_val:
+                        best_val = s
+                        best_idx = j
+                max_vals[i] = best_val
+                max_global_idx[i] = si + best_idx
+        return max_vals, max_global_idx
+
+    @_njit(parallel=True)
     def _smev_inner_loop_numba(data, start_indices, end_indices, window_size, n_events):
         # data must be int64 (scaled by 10000) so sums are exact — no floating-point ties
         max_vals = np.empty(n_events, dtype=np.int64)
         max_global_idx = np.empty(n_events, dtype=np.int64)
-        for i in range(n_events):
+        for i in _prange(n_events):
             si = start_indices[i]
             ei = end_indices[i]
             if si == ei:
@@ -622,88 +657,17 @@ class SMEV:
 
         return dict_ordinary, dict_AMS
 
-    def get_ordinary_events_values_new(self, data, dates, arr_dates_oe):
-        """Optimized version of get_ordinary_events_values.
+    def get_ordinary_events_values_v2(self, data, dates, arr_dates_oe, method="njit_parallel"):
+        """Optimized get_ordinary_events_values with selectable backend.
 
-        Uses np.convolve per event (for exact match with original),
-        but optimizes:
-        - searchsorted batched once for all durations
-        - years precomputed once
-        - pre-allocated output arrays instead of list.append
-        - vectorized AMS with numpy groupby-style ops
+        Args:
+            method: one of "vectorized", "njit", "njit_parallel"
+                - "vectorized"    : pure numpy, np.convolve per event
+                - "njit"          : numba JIT, single-threaded
+                - "njit_parallel" : numba JIT, parallel over events (default)
         """
-        dict_ordinary = {}
-        dict_AMS = {}
-
-        time_index = dates.reshape(-1)
-        n_events = arr_dates_oe.shape[0]
-
-        # Batch searchsorted (once for all durations)
-        oe_end = arr_dates_oe[:, 0].astype("datetime64[ns]")
-        oe_start = arr_dates_oe[:, 1].astype("datetime64[ns]")
-        start_indices = np.searchsorted(time_index, oe_start)
-        end_indices = np.searchsorted(time_index, oe_end)
-
-        # Precompute years (once for all durations)
-        ll_yrs = np.array([
-            oe_end[i].astype("datetime64[Y]").item().year
-            for i in range(n_events)
-        ], dtype=np.int64)
-
-        # Precompute unique years and masks for AMS
-        unique_years = np.unique(ll_yrs)
-        year_masks = {yr: ll_yrs == yr for yr in unique_years}
-
-        # Scale data to integers so sliding-window sums are exact (no FP ties).
-        data_int = np.round(data * 10000).astype(np.int64)
-
-        for d in range(len(self.durations)):
-            window_size = int(self.durations[d] / self.time_resolution)
-            ones_kernel = np.ones(window_size, dtype=np.int64)
-
-            # Pre-allocate arrays
-            max_vals = np.empty(n_events, dtype=np.float64)
-            max_global_idx = np.empty(n_events, dtype=np.int64)
-
-            for i in range(n_events):
-                si = start_indices[i]
-                ei = end_indices[i]
-
-                if si == ei:
-                    max_vals[i] = data_int[si] / 10000.0
-                    max_global_idx[i] = si
-                else:
-                    arr_conv2 = np.convolve(data_int[si:ei + 1], ones_kernel, "same")
-                    ll_idx_in_slice = np.nanargmax(arr_conv2)
-                    max_vals[i] = arr_conv2[ll_idx_in_slice] / 10000.0
-                    max_global_idx[i] = si + ll_idx_in_slice
-
-            ll_dates_arr = time_index[max_global_idx]
-
-            # Vectorized AMS
-            ams_vals = np.array([np.max(max_vals[mask]) for yr, mask in year_masks.items()])
-
-            df_ams = pd.DataFrame({"year": unique_years, "AMS": ams_vals})
-            df_oe = pd.DataFrame({
-                "year": ll_yrs,
-                "oe_time": ll_dates_arr,
-                "ordinary": max_vals,
-            })
-            dict_AMS[f"{self.durations[d]}"] = df_ams
-            dict_ordinary[f"{self.durations[d]}"] = df_oe
-
-        return dict_ordinary, dict_AMS
-
-
-    def get_ordinary_events_values_new_numba(self, data, dates, arr_dates_oe):
-        """Numba-accelerated version of get_ordinary_events_values.
-
-        Replaces the per-event np.convolve with a JIT-compiled inner loop
-        using cumsum-based sliding window sums (O(1) per position instead of
-        O(window_size)). Requires numba to be installed.
-        """
-        if not _NUMBA_AVAILABLE:
-            raise ImportError("numba is required for this function. Install with: pip install numba")
+        if method in ("njit", "njit_parallel") and not _NUMBA_AVAILABLE:
+            raise ImportError("numba is required for method='njit'/'njit_parallel'. Install with: pip install numba")
 
         dict_ordinary = {}
         dict_AMS = {}
@@ -724,16 +688,36 @@ class SMEV:
         unique_years = np.unique(ll_yrs)
         year_masks = {yr: ll_yrs == yr for yr in unique_years}
 
-        # Scale data to integers so sliding-window sums are exact (no FP ties).
         data_int = np.round(data * 10000).astype(np.int64)
 
         for d in range(len(self.durations)):
             window_size = int(self.durations[d] / self.time_resolution)
 
-            max_vals_int, max_global_idx = _smev_inner_loop_numba(
-                data_int, start_indices, end_indices, window_size, n_events
-            )
-            max_vals = max_vals_int / 10000.0
+            if method == "vectorized":
+                ones_kernel = np.ones(window_size, dtype=np.int64)
+                max_vals = np.empty(n_events, dtype=np.float64)
+                max_global_idx = np.empty(n_events, dtype=np.int64)
+                for i in range(n_events):
+                    si = start_indices[i]
+                    ei = end_indices[i]
+                    if si == ei:
+                        max_vals[i] = data_int[si] / 10000.0
+                        max_global_idx[i] = si
+                    else:
+                        arr_conv = np.convolve(data_int[si:ei + 1], ones_kernel, "same")
+                        ll_idx = np.nanargmax(arr_conv)
+                        max_vals[i] = arr_conv[ll_idx] / 10000.0
+                        max_global_idx[i] = si + ll_idx
+            elif method == "njit":
+                max_vals_int, max_global_idx = _smev_inner_loop_numba_seq(
+                    data_int, start_indices, end_indices, window_size, n_events
+                )
+                max_vals = max_vals_int / 10000.0
+            else:  # njit_parallel
+                max_vals_int, max_global_idx = _smev_inner_loop_numba(
+                    data_int, start_indices, end_indices, window_size, n_events
+                )
+                max_vals = max_vals_int / 10000.0
 
             ll_dates_arr = time_index[max_global_idx]
             ams_vals = np.array([np.max(max_vals[mask]) for yr, mask in year_masks.items()])
