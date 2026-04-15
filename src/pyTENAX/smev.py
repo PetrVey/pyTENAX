@@ -176,161 +176,30 @@ class SMEV:
     def get_ordinary_events(
         self,
         data: Union[pd.DataFrame, np.ndarray],
-        dates: list,
-        name_col="value",
-        check_gaps=True,
-    ) -> list:
-        """Function that extracts ordinary precipitation events out of the entire data.
-        This also checks and deletes ordinary events with unknown start/end if check_gaps = True.
-
-        Args:
-            data (Union[pd.DataFrame, np.ndarray]): Data with precipitation values.
-            dates (list): List with dates of precipitation values. dtype must be datetime64[ns].\
-                Only relevant if `data` is an array or if `check_gaps==True`.
-            name_col (str, optional): Column name in `data` for precipitation values.\
-                Only relevant if `data` is a dataframe. Defaults to "value".
-            check_gaps (bool, optional): Check for gaps in precipitation time series. \
-                Defaults to True.
-
-        Returns:
-            list: Consecutive values above `self.min_rain` separated by more than `self.storm_separation_time`.
-        """
-        if not self.__incomplete_years_removed__:
-            raise ValueError(
-                "You must run 'remove_incomplete_years' before running this function. "
-                "If you are sure your data is complete, set "
-                "self.__incomplete_years_removed__ = True to bypass this check."
-            )
-            
-        if isinstance(data, pd.DataFrame):
-            # Find values above threshold
-            above_threshold = data[data[name_col] > self.min_rain]
-            # Find consecutive values above threshold separated by more than storm_separation_time
-            consecutive_values = []
-            temp = []
-            for index, _ in above_threshold.iterrows():
-                if not temp:
-                    temp.append(index)
-                else:
-                    if index - temp[-1] > pd.Timedelta(
-                        hours=self.storm_separation_time
-                    ):
-                        if len(temp) >= 1:
-                            consecutive_values.append(temp)
-                        temp = []
-                    temp.append(index)
-            if len(temp) >= 1:
-                consecutive_values.append(temp)
-        elif isinstance(data, np.ndarray):
-            above_threshold_indices = np.where(data > self.min_rain)[0]
-
-            # Find consecutive values above threshold separated by more than storm_separation_time
-            consecutive_values = []
-            temp = []
-            for index in above_threshold_indices:
-                if not temp:
-                    temp.append(index)
-                else:
-                    # numpy delta is in nanoseconds, it  might be better to do dates[index] - dates[temp[-1]]).item() / np.timedelta64(1, 'm')
-                    if (
-                        (dates[index] - dates[temp[-1]]).item()
-                        > (self.storm_separation_time * 3.6e12)
-                    ):  # Assuming 24 is the number of hours, nanoseconds * 3.6e+12 = hours
-                        if len(temp) >= 1:
-                            consecutive_values.append(dates[temp])
-                        temp = []
-                    temp.append(index)
-            if len(temp) >= 1:
-                consecutive_values.append(dates[temp])
-
-        if check_gaps:
-            # remove event that starts before dataset starts in regard of separation time
-            if (consecutive_values[0][0] - dates[0]).item() < (
-                self.storm_separation_time * 3.6e12
-            ):  # this numpy dt, so still in nanoseconds
-                consecutive_values.pop(0)
-            else:
-                pass
-
-            # remove event that ends before dataset ends in regard of separation time
-            if (dates[-1] - consecutive_values[-1][-1]).item() < (
-                self.storm_separation_time * 3.6e12
-            ):  # this numpy dt, so still in nanoseconds
-                consecutive_values.pop()
-            else:
-                pass
-
-            # Locate OE that ends before gaps in data starts.
-            # Calculate the differences between consecutive elements
-            time_diffs = np.diff(dates)
-            # difference of first element is time resolution
-            time_res = time_diffs[0]
-            # Identify gaps (where the difference is greater than 1 hour)
-            gap_indices_end = np.where(
-                time_diffs
-                > np.timedelta64(int(self.storm_separation_time * 3.6e12), "ns")
-            )[0]
-            # extend by another index in gap cause we need to check if there is OE there too
-            gap_indices_start = gap_indices_end + 1
-
-            match_info = []
-            for gap_idx in gap_indices_end:
-                end_date = dates[gap_idx]
-                start_date = end_date - np.timedelta64(
-                    int(self.storm_separation_time * 3.6e12), "ns"
-                )
-                # Creating an array from start_date to end_date in hourly intervals
-                temp_date_array = np.arange(start_date, end_date, time_res)
-
-                # Checking for matching indices in consecutive_values
-                for i, sub_array in enumerate(consecutive_values):
-                    match_indices = np.where(np.isin(sub_array, temp_date_array))[0]
-                    if match_indices.size > 0:
-                        match_info.append(i)
-
-            for gap_idx in gap_indices_start:
-                start_date = dates[gap_idx]
-                end_date = start_date + np.timedelta64(
-                    int(self.storm_separation_time * 3.6e12), "ns"
-                )
-                # Creating an array from start_date to end_date in hourly intervals
-                temp_date_array = np.arange(start_date, end_date, time_res)
-
-                # Checking for matching indices in consecutive_values
-                for i, sub_array in enumerate(consecutive_values):
-                    match_indices = np.where(np.isin(sub_array, temp_date_array))[0]
-                    if match_indices.size > 0:
-                        match_info.append(i)
-
-            for del_index in sorted(match_info, reverse=True):
-                del consecutive_values[del_index]
-
-        return consecutive_values
-        
-    def get_ordinary_events_new(
-        self,
-        data: Union[pd.DataFrame, np.ndarray],
         dates: np.ndarray,
         name_col: str = "value",
         check_gaps=True,
         ) -> list:
-        """Vectorized ordinary event extraction using np.diff + np.split.
+        """Extract ordinary precipitation events from a time series.
 
-        Functionally equivalent to `get_ordinary_events` (numpy branch) but
-        significantly faster by replacing the Python for-loop with vectorized
-        numpy operations.
+        Groups timesteps at or above ``self.min_rain`` into independent storm
+        events separated by at least ``self.storm_separation_time`` hours.
+        Optionally removes events too close to dataset boundaries or data gaps.
 
         Args:
-            data (Union[pd.DataFrame, np.ndarray]): Data with precipitation values.
-                DataFrame support is deprecated and will be removed in a future version.
-            dates (np.ndarray): Array with dates of precipitation values. dtype must be datetime64[ns].
-            name_col (str, optional): Column name in `data` for precipitation values.
-                Only relevant if `data` is a DataFrame. Defaults to "value".
-            check_gaps (bool, optional): Check for gaps in precipitation time series.
-                Defaults to True.
+            data (Union[pd.DataFrame, np.ndarray]): Precipitation values.
+            dates (np.ndarray): Timestamps of the precipitation data.
+                dtype must be datetime64[ns].
+            name_col (str, optional): Column name to use when ``data`` is a
+                DataFrame. Defaults to "value".
+            check_gaps (bool, optional): Remove events that fall within
+                ``storm_separation_time`` of the dataset boundaries or internal
+                data gaps. Defaults to True.
 
         Returns:
-            list: Consecutive values above `self.min_rain` separated by more than `self.storm_separation_time`.
+            list: List of np.ndarray, each containing the timestamps of one
+                ordinary event (values >= ``self.min_rain`` separated by more
+                than ``self.storm_separation_time`` hours).
         """
         if not self.__incomplete_years_removed__:
             raise ValueError(
@@ -342,8 +211,8 @@ class SMEV:
         if isinstance(data, pd.DataFrame):
             data = np.array(data[name_col])
 
-        above_threshold_indices = np.where(data > self.min_rain)[0]
- 
+        above_threshold_indices = np.where(data >= self.min_rain)[0]
+
         if len(above_threshold_indices) == 0:
             return []
  
@@ -434,95 +303,9 @@ class SMEV:
         """Function that removes ordinary events that are too short.
 
         Args:
-            list_ordinary (list): list of indices of ordinary events as returned by `get_ordinary_events()`.
-
-        Returns:
-            arr_vals (np.ndarray): Array with indices of events that are not too short.
-            arr_dates (np.ndarray): Array with tuple consisting of start and end dates of events that are not too short.
-            n_ordinary_per_year (pd.Series): Series with the number of ordinary events per year.
-        """
-        if not self.__incomplete_years_removed__:
-            raise ValueError(
-                "You must run 'remove_incomplete_years' before running this function. "
-                "If you are sure your data is complete, set "
-                "self.__incomplete_years_removed__ = True to bypass this check."
-            )
-
-        if isinstance(list_ordinary[0][0], pd.Timestamp):
-            # event is multiplied by its lenght to get duration and compared with min_event_duration
-            ll_short = [
-                True
-                if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
-                >= pd.Timedelta(minutes=self.min_event_duration)
-                else False
-                for ev in list_ordinary
-            ]
-            ll_dates = [
-                (
-                    ev[-1].strftime("%Y-%m-%d %H:%M:%S"),
-                    ev[0].strftime("%Y-%m-%d %H:%M:%S"),
-                )
-                if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
-                >= pd.Timedelta(minutes=self.min_event_duration)
-                else (np.nan, np.nan)
-                for ev in list_ordinary
-            ]
-            arr_vals = np.array(ll_short)[ll_short]
-            arr_dates = np.array(ll_dates)[ll_short]
-
-            filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
-            list_year = pd.DataFrame(
-                [filtered_list[_][0].year for _ in range(len(filtered_list))],
-                columns=["year"],
-            )
-            n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
-
-        elif isinstance(list_ordinary[0][0], np.datetime64):
-            ll_short = [
-                True
-                if (ev[-1] - ev[0]).astype("timedelta64[m]")
-                + np.timedelta64(int(self.time_resolution), "m")
-                >= pd.Timedelta(minutes=self.min_event_duration)
-                else False
-                for ev in list_ordinary
-            ]
-            ll_dates = [
-                (ev[-1], ev[0])
-                if (ev[-1] - ev[0]).astype("timedelta64[m]")
-                + np.timedelta64(int(self.time_resolution), "m")
-                >= pd.Timedelta(minutes=self.min_event_duration)
-                else (np.nan, np.nan)
-                for ev in list_ordinary
-            ]
-            arr_vals = np.array(ll_short)[ll_short]
-            arr_dates = np.array(ll_dates)[ll_short]
-
-            filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
-            list_year = pd.DataFrame(
-                [
-                    filtered_list[_][0].astype("datetime64[Y]").item().year
-                    for _ in range(len(filtered_list))
-                ],
-                columns=["year"],
-            )
-            n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
-
-        return arr_vals, arr_dates, n_ordinary_per_year
-
-
-    def remove_short_new(
-        self, list_ordinary: list
-    ) -> Tuple[np.ndarray, np.ndarray, pd.Series]:
-        """Function that removes ordinary events that are too short.
-
-        Functionally equivalent to `remove_short` (numpy branch) but handles
-        pd.Timestamp input by converting to np.datetime64 upfront, so only
-        one code path is needed.
-
-        Args:
             list_ordinary (list): list of ordinary events as returned by
-                `get_ordinary_events()` or `get_ordinary_events_new()`.
-                Each event may contain pd.Timestamp or np.datetime64 values.
+                `get_ordinary_events()`. Each event may contain pd.Timestamp
+                or np.datetime64 values.
 
         Returns:
             arr_vals (np.ndarray): Array with indices of events that are not too short.
@@ -568,103 +351,61 @@ class SMEV:
 
 
     def get_ordinary_events_values(
-        self, data: np.ndarray, dates: np.ndarray, arr_dates_oe
+        self,
+        data: np.ndarray,
+        dates: np.ndarray,
+        arr_dates_oe: np.ndarray,
+        method: str = "vectorized",
     ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, pd.DataFrame]]:
-        """
-        Function that extract ordinary events and annual maximas out of precpitation data. 
-        
+        """Extract ordinary events and annual maxima from precipitation data.
+
         Parameters
         ----------
-        data (np.ndarray): data of full precipitation dataset
-        dates (np.ndarray): time of full precipitation dataset
-        arr_dates_oe (np.ndarray): end and start of ordinary event as retruned by remove_short function.
+        data : np.ndarray
+            Full precipitation time series.
+        dates : np.ndarray
+            Timestamps of the full precipitation dataset.
+        arr_dates_oe : np.ndarray
+            End and start times of ordinary events as returned by remove_short.
+        method : str, optional
+            Backend used for the sliding-window maximum search. Defaults to
+            ``"vectorized"``. One of:
+
+            - ``"vectorized"``    — pure numpy, ``np.convolve`` per event.
+            - ``"njit"``          — numba JIT-compiled loop, single-threaded.
+            - ``"njit_parallel"`` — numba JIT-compiled loop, parallelised over
+              events. Requires ``numba`` to be installed.
+
+        Notes
+        -----
+        When using ``method="njit"`` or ``method="njit_parallel"``, the first
+        call in a Python session triggers JIT compilation and can take several
+        seconds. Run a warmup call before any timed or production code::
+
+            # Warmup — compile both kernels once at session start
+            S_SMEV.get_ordinary_events_values(
+                data=df_arr, dates=df_dates, arr_dates_oe=arr_dates,
+                method="njit"
+            )
+            S_SMEV.get_ordinary_events_values(
+                data=df_arr, dates=df_dates, arr_dates_oe=arr_dates,
+                method="njit_parallel"
+            )
+            # Subsequent calls are fast
+            dict_ordinary, dict_AMS = S_SMEV.get_ordinary_events_values(
+                data=df_arr, dates=df_dates, arr_dates_oe=arr_dates,
+                method="njit_parallel"
+            )
 
         Returns
         -------
-        dict_ordinary (dict): key is duration, value is pd.DataFrame with year, oe_time and value of ordinary event (eg. depth)
-            contains ordinary events values per duration.
-            example dict_ordinary = {"10" : pd.DataFrame(columns=['year', 'oe_time', 'ordinary'])
-        dict_AMS (dict): key is duration, value is pd.DataFrame with year and the annual maxima (AMS) value.
-            contains anual maximas for each year per duration.
-
-        """
-        dict_ordinary = {}
-        dict_AMS = {}
-        # Scale data to integers so sliding-window sums are exact (no FP ties).
-        # Data is assumed to be rounded to 4 decimal places; multiply by 10000 fits in int64.
-        data_int = np.round(data * 10000).astype(np.int64)
-        for d in range(len(self.durations)):
-            arr_conv = np.convolve(
-                data_int,
-                np.ones(int(self.durations[d] / self.time_resolution), dtype=np.int64),
-                "same",
-            )
-
-            # Convert time index to numpy array
-            time_index = dates.reshape(-1)
-
-            # Use numpy indexing to get the max values efficiently
-            ll_vals = []
-            ll_dates = []
-            for i in range(arr_dates_oe.shape[0]):
-                start_time_idx = np.searchsorted(time_index, arr_dates_oe[i, 1])
-
-                end_time_idx = np.searchsorted(time_index, arr_dates_oe[i, 0])
-
-                # Check if start and end times are the same
-                if start_time_idx == end_time_idx:
-                    ll_val = arr_conv[start_time_idx] / 10000.0
-                    ll_date = time_index[start_time_idx]
-                else:
-                    # the +1 in end_time_index is because then we search by index but we want to includde last as well,
-                    # without, it slices eg. end index is 10, without +1 it slices 0 to 9 instead of 0 to 10 (stops 1 before)
-                    # get index of ll_val within the sliced array and perform convolve in this slice
-                    arr_conv2 = np.convolve(data_int[start_time_idx : end_time_idx + 1],
-                                            np.ones(int(self.durations[d] / self.time_resolution), dtype=np.int64),
-                                            "same",
-                                        )
-                    # get index of max value in convolve vector
-                    ll_idx_in_slice = np.nanargmax(arr_conv2)
-
-                    # adjust the index to refer to the original arr_conv
-                    ll_idx_in_arr_conv = start_time_idx + ll_idx_in_slice
-                    ll_val = arr_conv2[ll_idx_in_slice] / 10000.0
-                    ll_date = time_index[ll_idx_in_arr_conv]
-
-                ll_vals.append(ll_val)
-                ll_dates.append(ll_date)
-
-            # years  of ordinary events
-            ll_yrs = [
-                arr_dates_oe[_, 0].astype("datetime64[Y]").item().year
-                for _ in range(arr_dates_oe.shape[0])
-            ]
-
-            blocks = np.unique(ll_yrs)
-
-            AMS = {}
-            for j in blocks:
-                indices = [index for index, value in enumerate(ll_yrs) if value == j]
-                slice_ll_vals = [ll_vals[i] for i in indices]
-                AMS[j] = max(slice_ll_vals)
-
-            df_ams = pd.DataFrame({"year": [*AMS.keys()], "AMS": [*AMS.values()]})
-            df_oe = pd.DataFrame(
-                {"year": ll_yrs, "oe_time": ll_dates, "ordinary": ll_vals}
-            )
-            dict_AMS.update({f"{self.durations[d]}": df_ams})
-            dict_ordinary.update({f"{self.durations[d]}": df_oe})
-
-        return dict_ordinary, dict_AMS
-
-    def get_ordinary_events_values_v2(self, data, dates, arr_dates_oe, method="njit_parallel"):
-        """Optimized get_ordinary_events_values with selectable backend.
-
-        Args:
-            method: one of "vectorized", "njit", "njit_parallel"
-                - "vectorized"    : pure numpy, np.convolve per event
-                - "njit"          : numba JIT, single-threaded
-                - "njit_parallel" : numba JIT, parallel over events (default)
+        dict_ordinary : dict
+            Key is duration (str), value is a ``pd.DataFrame`` with columns
+            ``year``, ``oe_time``, ``ordinary`` (event depth/intensity).
+            Example: ``{"10": pd.DataFrame(columns=['year', 'oe_time', 'ordinary'])}``.
+        dict_AMS : dict
+            Key is duration (str), value is a ``pd.DataFrame`` with columns
+            ``year`` and ``AMS`` (annual maximum value).
         """
         if method in ("njit", "njit_parallel") and not _NUMBA_AVAILABLE:
             raise ImportError("numba is required for method='njit'/'njit_parallel'. Install with: pip install numba")
@@ -821,7 +562,6 @@ class SMEV:
         dict_smev_outputs = {}
         for d in range(len(self.durations)):
             P = dict_ordinary[f"{self.durations[d]}"]["ordinary"]
-            blocks_id = dict_ordinary[f"{self.durations[d]}"]["year"]
 
             # Estimate shape and scale parameters of weibull distribution
             smev_shape, smev_scale = self.estimate_smev_parameters(
@@ -840,6 +580,49 @@ class SMEV:
 
         return dict_smev_outputs
 
+    def _run_smev_all_durations(
+        self,
+        dict_ordinary: Dict[str, pd.DataFrame],
+        n: float,
+    ) -> pd.DataFrame:
+        """Estimate SMEV parameters and return levels for all durations.
+
+        Convenience wrapper around :meth:`estimate_smev_parameters` and
+        :meth:`smev_return_values` that iterates over all configured durations
+        and collects results into a single summary DataFrame.
+
+        Parameters
+        ----------
+        dict_ordinary : Dict[str, pd.DataFrame]
+            Ordinary events per duration as returned by
+            :meth:`get_ordinary_events_values`.
+        n : float
+            Mean number of ordinary events per year (from
+            :meth:`remove_short`).
+
+        Returns
+        -------
+        pd.DataFrame
+            One row per duration (index e.g. ``"10 min"``), columns:
+            ``N_oe``, ``n_mean``, ``shape``, ``scale``,
+            and one column per return period (``"RP 2yr"``, ``"RP 5yr"``, …).
+        """
+        rows = {}
+        for dur in [str(d) for d in self.durations]:
+            P = dict_ordinary[dur]["ordinary"].to_numpy()
+            shape, scale = self.estimate_smev_parameters(P, self.left_censoring)
+            RL = self.smev_return_values(self.return_period, shape, scale, n)
+            rows[f"{dur} min"] = (
+                [len(P), round(n, 2), round(shape, 4), round(scale, 4)]
+                + [round(v, 2) for v in RL]
+            )
+
+        col_names = ["N_oe", "n_mean", "shape", "scale"] + [
+            f"RP {rp}yr" for rp in self.return_period
+        ]
+        return pd.DataFrame(rows, index=col_names).T
+
+    @staticmethod
     def get_stats(
         df: pd.DataFrame,
     ) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
