@@ -8,7 +8,9 @@ try:
     from numba import njit as _njit, prange as _prange
 
     @_njit
-    def _smev_inner_loop_numba_seq(data, start_indices, end_indices, window_size, n_events):
+    def _smev_inner_loop_numba_seq(
+        data, start_indices, end_indices, window_size, n_events
+    ):
         max_vals = np.empty(n_events, dtype=np.int64)
         max_global_idx = np.empty(n_events, dtype=np.int64)
         for i in range(n_events):
@@ -43,7 +45,9 @@ try:
         return max_vals, max_global_idx
 
     @_njit(parallel=True)
-    def _smev_inner_loop_numba(data, start_indices, end_indices, window_size, n_events):
+    def _smev_inner_loop_numba(
+        data, start_indices, end_indices, window_size, n_events
+    ):
         # data must be int64 (scaled by 10000) so sums are exact — no floating-point ties
         max_vals = np.empty(n_events, dtype=np.int64)
         max_global_idx = np.empty(n_events, dtype=np.int64)
@@ -55,7 +59,8 @@ try:
                 max_global_idx[i] = si
             else:
                 slice_len = ei - si + 1
-                # np.convolve 'same' returns max(n, m) elements; numpy's start offset is (min(n,m)-1)//2
+                # np.convolve 'same' returns max(n, m) elements;
+                # numpy's start offset is (min(n,m)-1)//2
                 output_len = slice_len if slice_len > window_size else window_size
                 min_len = slice_len if slice_len < window_size else window_size
                 offset = (min_len - 1) // 2
@@ -96,8 +101,6 @@ class SMEV:
         storm_separation_time: int = 24,
         left_censoring: list = [0, 1],
         min_rain: Union[float, int] = 0,
-        
-        
     ):
         """Initiates SMEV class.
 
@@ -114,7 +117,6 @@ class SMEV:
                 of the data to be used for the parameters estimation. Defaults to [0, 1].
             min_rain (Union[float, int], optional): Minimum rainfall value. Defaults to 0.
         """
-        
         self.return_period = return_period
         self.durations = durations
         self.time_resolution = time_resolution
@@ -125,8 +127,7 @@ class SMEV:
         self.min_rain = min_rain
 
         self.__incomplete_years_removed__ = False
-        
-        
+
     def remove_incomplete_years(
         self, data_pr: pd.DataFrame, name_col="value", nan_to_zero=True
     ) -> pd.DataFrame:
@@ -172,14 +173,13 @@ class SMEV:
 
         return data_cleanded
 
-
     def get_ordinary_events(
         self,
         data: Union[pd.DataFrame, np.ndarray],
         dates: np.ndarray,
         name_col: str = "value",
         check_gaps=True,
-        ) -> list:
+    ) -> list:
         """Extract ordinary precipitation events from a time series.
 
         Groups timesteps at or above ``self.min_rain`` into independent storm
@@ -216,26 +216,26 @@ class SMEV:
 
         if len(above_threshold_indices) == 0:
             return []
- 
+
         # Get dates at above-threshold positions
         above_dates = dates[above_threshold_indices]
- 
+
         # Compute time differences between consecutive above-threshold timesteps (in nanoseconds)
         time_diffs_above = np.diff(above_dates).astype(np.int64)
- 
+
         # Find where gaps exceed separation time
         separation_ns = int(self.storm_separation_time * 3.6e12)  # hours to nanoseconds
         gap_mask = time_diffs_above > separation_ns
- 
+
         # Split indices at gap locations
         split_points = np.where(gap_mask)[0] + 1
- 
+
         # Split into groups of indices, then map back to dates
         index_groups = np.split(above_threshold_indices, split_points)
- 
+
         # Convert to list of date arrays (same format as original)
         consecutive_values = [dates[group] for group in index_groups]
- 
+
         if check_gaps:
             # remove event that starts before dataset starts in regard of separation time
             if (consecutive_values[0][0] - dates[0]).item() < (
@@ -244,7 +244,7 @@ class SMEV:
                 consecutive_values.pop(0)
             else:
                 pass
- 
+
             # remove event that ends before dataset ends in regard of separation time
             if (dates[-1] - consecutive_values[-1][-1]).item() < (
                 self.storm_separation_time * 3.6e12
@@ -252,7 +252,7 @@ class SMEV:
                 consecutive_values.pop()
             else:
                 pass
- 
+
             # Locate OE that ends before gaps in data starts.
             # Calculate the differences between consecutive elements
             time_diffs = np.diff(dates)
@@ -265,7 +265,7 @@ class SMEV:
             )[0]
             # extend by another index in gap cause we need to check if there is OE there too
             gap_indices_start = gap_indices_end + 1
- 
+
             match_info = []
             for gap_idx in gap_indices_end:
                 end_date = dates[gap_idx]
@@ -273,31 +273,29 @@ class SMEV:
                     int(self.storm_separation_time * 3.6e12), "ns"
                 )
                 temp_date_array = np.arange(start_date, end_date, time_res)
- 
+
                 for i, sub_array in enumerate(consecutive_values):
                     match_indices = np.where(np.isin(sub_array, temp_date_array))[0]
                     if match_indices.size > 0:
                         match_info.append(i)
- 
+
             for gap_idx in gap_indices_start:
                 start_date = dates[gap_idx]
                 end_date = start_date + np.timedelta64(
                     int(self.storm_separation_time * 3.6e12), "ns"
                 )
                 temp_date_array = np.arange(start_date, end_date, time_res)
- 
+
                 for i, sub_array in enumerate(consecutive_values):
                     match_indices = np.where(np.isin(sub_array, temp_date_array))[0]
                     if match_indices.size > 0:
                         match_info.append(i)
- 
+
             for del_index in sorted(match_info, reverse=True):
                 del consecutive_values[del_index]
- 
+
         return consecutive_values
-        
-        
-        
+
     def remove_short(
         self, list_ordinary: list
     ) -> Tuple[np.ndarray, np.ndarray, pd.Series]:
@@ -349,7 +347,6 @@ class SMEV:
         n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
 
         return arr_vals, arr_dates, n_ordinary_per_year
-
 
     def get_ordinary_events_values(
         self,
@@ -409,7 +406,10 @@ class SMEV:
             ``year`` and ``AMS`` (annual maximum value).
         """
         if method in ("njit", "njit_parallel") and not _NUMBA_AVAILABLE:
-            raise ImportError("numba is required for method='njit'/'njit_parallel'. Install with: pip install numba")
+            raise ImportError(
+                "numba is required for method='njit'/'njit_parallel'. "
+                "Install with: pip install numba"
+            )
 
         dict_ordinary = {}
         dict_AMS = {}
@@ -475,9 +475,10 @@ class SMEV:
 
         return dict_ordinary, dict_AMS
 
-
     def estimate_smev_parameters(
-        self, ordinary_events: Union[np.ndarray, pd.Series, list], data_portion: list[Tuple[int, float]]
+        self,
+        ordinary_events: Union[np.ndarray, pd.Series, list],
+        data_portion: list[Tuple[int, float]],
     ) -> list[float]:
         """Function that estimates shape and scale parameters of the Weibull distribution.
 
@@ -489,21 +490,22 @@ class SMEV:
         Returns:
             list[float]: Shape and scale parameters of the Weibull distribution.
         """
-
         sorted_df = np.sort(ordinary_events)
-        ECDF = np.arange(1, 1 + len(sorted_df)) / (1 + len(sorted_df))
-        #fidx: first index of data to keep
+        ecdf = np.arange(1, 1 + len(sorted_df)) / (1 + len(sorted_df))
+        # fidx: first index of data to keep
         fidx = max(1, math.floor((len(sorted_df)) * data_portion[0]))
-        #tidx: last index of data to keep
+        # tidx: last index of data to keep
         tidx = math.ceil(len(sorted_df) * data_portion[1])
-        if fidx == 1: #this is check basically if censoring set to [0,1], if so, we take all values
-            to_use = np.arange(fidx-1, tidx) # Create an array of indices from fidx-1 up to tidx (inclusive)
-        else: # else, we take only from this fidx, eg. [0.5,1] out of 1000 samples will take 500-999 indexes (top 500)
-            to_use = np.arange(fidx, tidx) # Create an array of indices from fidx up to tidx (inclusive)
-        # Select only the subset of sorted values corresponding to the chosen quantile range
+        # if censoring set to [0,1], take all values
+        if fidx == 1:
+            to_use = np.arange(fidx - 1, tidx)
+        else:
+            # e.g. [0.5,1] out of 1000 samples takes indexes 500-999 (top 500)
+            to_use = np.arange(fidx, tidx)
+        # Select only the subset of sorted values for the chosen quantile range
         to_use_array = sorted_df[to_use]
 
-        X = np.log(np.log(1 / (1 - ECDF[to_use])))
+        X = np.log(np.log(1 / (1 - ecdf[to_use])))
         Y = np.log(to_use_array)
         X = sm.add_constant(X)
         model = sm.OLS(Y, X)
@@ -521,7 +523,8 @@ class SMEV:
     def smev_return_values(
         self, return_period: int, shape: float, scale: float, n: float
     ) -> float:
-        """Function that calculates return values (here, rainfall intensity) acoording to parameters of the Weibull distribution.
+        """Function that calculates return values (here, rainfall intensity)
+        according to parameters of the Weibull distribution.
 
         Args:
             return_period (int): Return period of interest.
@@ -532,7 +535,6 @@ class SMEV:
         Returns:
             float: Rainfall intensity value.
         """
-
         return_period = np.asarray(return_period)
         quantile = 1 - (1 / return_period)
         if shape == 0 or n == 0:
@@ -570,13 +572,13 @@ class SMEV:
             )
 
             # Estimate return period (quantiles) with SMEV
-            smev_RL = self.smev_return_values(
+            smev_rl = self.smev_return_values(
                 self.return_period, smev_shape, smev_scale, n
             )
 
             dict_smev_outputs[f"{self.durations[d]}"] = {
                 "SMEV_phat": [smev_shape, smev_scale],
-                "RLs": smev_RL,
+                "RLs": smev_rl,
             }
 
         return dict_smev_outputs
@@ -612,10 +614,10 @@ class SMEV:
         for dur in [str(d) for d in self.durations]:
             P = dict_ordinary[dur]["ordinary"].to_numpy()
             shape, scale = self.estimate_smev_parameters(P, self.left_censoring)
-            RL = self.smev_return_values(self.return_period, shape, scale, n)
+            rl = self.smev_return_values(self.return_period, shape, scale, n)
             rows[f"{dur} min"] = (
                 [len(P), round(n, 2), round(shape, 4), round(scale, 4)]
-                + [round(v, 2) for v in RL]
+                + [round(v, 2) for v in rl]
             )
 
         col_names = ["N_oe", "n_mean", "shape", "scale"] + [
@@ -654,7 +656,7 @@ class SMEV:
 
         return total_prec, mean_prec, sd_prec, count_prec
 
-    def SMEV_bootstrap_uncertainty(
+    def smev_bootstrap_uncertainty(
         self, P: np.ndarray, blocks_id: np.ndarray, niter: int, n: float
     ):
         """Function that bootstraps uncertainty of SMEV return values.
@@ -668,45 +670,45 @@ class SMEV:
         Returns:
             np.ndarray: Array with bootstrapped return value uncertainty.
         """
-        RP = self.return_period
+        rp = self.return_period
 
         blocks = np.unique(blocks_id)
-        M = len(blocks)
-        randy = np.random.randint(0, M, size=(M, niter))
+        n_blocks = len(blocks)
+        randy = np.random.randint(0, n_blocks, size=(n_blocks, niter))
 
         # Initialize variables
-        RL_unc = np.full((niter, len(RP)), np.nan)
+        rl_unc = np.full((niter, len(rp)), np.nan)
         n_err = 0
 
         # Random sampling iterations
         for ii in range(niter):
-            Pr = []
-            Bid = []
+            pr = []
+            bid = []
 
             # Create bootstrapped data sample and corresponding 'fake' blocks id
-            for iy in range(M):
+            for iy in range(n_blocks):
                 selected = blocks_id == blocks[randy[iy, ii]]
-                Pr.append(P[selected])
-                Bid.append(
+                pr.append(P[selected])
+                bid.append(
                     np.full(np.sum(selected), iy + 1)
                 )  # MATLAB indexing starts at 1
 
             # Concatenate the resampled data
-            Pr = np.concatenate(Pr)
-            Bid = np.concatenate(Bid)
+            pr = np.concatenate(pr)
+            bid = np.concatenate(bid)
 
             try:
-                # estimate shape and  scale parameters of weibull distribution
-                SMEV_shape, SMEV_scale = self.estimate_smev_parameters(
-                    Pr, self.left_censoring
+                # estimate shape and scale parameters of weibull distribution
+                smev_shape, smev_scale = self.estimate_smev_parameters(
+                    pr, self.left_censoring
                 )
                 # estimate return period (quantiles) with SMEV
-                smev_RP = self.smev_return_values(
-                    self.return_period, SMEV_shape, SMEV_scale, n
+                smev_rp = self.smev_return_values(
+                    self.return_period, smev_shape, smev_scale, n
                 )
                 # Store results
-                RL_unc[ii, :] = smev_RP
+                rl_unc[ii, :] = smev_rp
 
             except Exception:
                 n_err += 1
-        return RL_unc
+        return rl_unc
