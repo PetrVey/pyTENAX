@@ -19,7 +19,7 @@ S = tenax.TENAX(
         200,
     ],  # for some reason it doesnt like calculating RP =<1
     durations=[10, 60, 180, 360, 720, 1440],
-    time_resolution=5,  # time resolution in minutes
+    time_resolution=10,  # time resolution in minutes
     left_censoring=[0, 0.90],
     alpha=0.05,
 )

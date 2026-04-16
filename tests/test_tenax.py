@@ -40,7 +40,7 @@ class TestTENAX(unittest.TestCase):
         cls.S = tenax.TENAX(
             return_period=[2, 5, 10, 20, 50, 100, 200],
             durations=[10,],
-            time_resolution=5,
+            time_resolution=10,
             left_censoring=[0, 0.90],
             alpha=0.05,
         )

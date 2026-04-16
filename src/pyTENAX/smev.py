@@ -304,7 +304,10 @@ class SMEV:
 
         dates = dates.astype("datetime64[ns]")
 
-        above_threshold_indices = np.where(data >= self.min_rain)[0]
+        if self.min_rain == 0:
+            above_threshold_indices = np.where(data > self.min_rain)[0]
+        else:
+            above_threshold_indices = np.where(data >= self.min_rain)[0]
 
         if len(above_threshold_indices) == 0:
             return []
