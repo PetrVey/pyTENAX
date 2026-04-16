@@ -7,6 +7,11 @@ import time
 from scipy.optimize import curve_fit
 from typing import Union, Tuple, Dict
 from multiprocessing.dummy import Pool as ThreadPool
+from pyTENAX.smev import (
+    _smev_inner_loop_numba_seq,
+    _smev_inner_loop_numba,
+    _NUMBA_AVAILABLE,
+)
 
 
 class TENAX:
@@ -347,6 +352,7 @@ class TENAX:
         data: np.ndarray,
         dates: np.ndarray,
         arr_dates_oe: np.ndarray,
+        method: str = "vectorized",
     ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, pd.DataFrame]]:
         """Extract ordinary events and annual maxima from precipitation data.
 
@@ -355,6 +361,14 @@ class TENAX:
             dates (np.ndarray): Timestamps of the full precipitation dataset.
             arr_dates_oe (np.ndarray): End and start times of ordinary events
                 as returned by ``remove_short``.
+            method (str, optional):
+                Backend used for the sliding-window maximum search. Defaults
+                to ``"vectorized"``. One of:
+
+                - ``"vectorized"``    — pure numpy, ``np.convolve`` per event.
+                - ``"njit"``          — numba JIT-compiled loop, single-threaded.
+                - ``"njit_parallel"`` — numba JIT-compiled loop, parallelised
+                  over events. Requires ``numba`` to be installed.
 
         Returns:
             dict_ordinary (dict): Key is duration (str), value is a
@@ -366,6 +380,12 @@ class TENAX:
                 ``pd.DataFrame`` with columns ``year`` and ``AMS``
                 (annual maximum value).
         """
+        if method in ("njit", "njit_parallel") and not _NUMBA_AVAILABLE:
+            raise ImportError(
+                "numba is required for method='njit'/'njit_parallel'. "
+                "Install with: pip install numba"
+            )
+
         dict_ordinary = {}
         dict_AMS = {}
 
@@ -385,26 +405,38 @@ class TENAX:
         unique_years = np.unique(ll_yrs)
         year_masks = {yr: ll_yrs == yr for yr in unique_years}
 
+        data_int = np.round(data * 10000).astype(np.int64)
+
         for d in range(len(self.durations)):
             window_size = int(self.durations[d] / self.time_resolution)
-            ones_kernel = np.ones(window_size, dtype=int)
 
-            max_vals = np.empty(n_events, dtype=np.float64)
-            max_global_idx = np.empty(n_events, dtype=np.int64)
-
-            for i in range(n_events):
-                si = start_indices[i]
-                ei = end_indices[i]
-                if si == ei:
-                    max_vals[i] = data[si]
-                    max_global_idx[i] = si
-                else:
-                    arr_conv = np.convolve(
-                        data[si:ei + 1], ones_kernel, "same"
-                    )
-                    ll_idx = np.nanargmax(arr_conv)
-                    max_vals[i] = arr_conv[ll_idx]
-                    max_global_idx[i] = si + ll_idx
+            if method == "vectorized":
+                ones_kernel = np.ones(window_size, dtype=np.int64)
+                max_vals = np.empty(n_events, dtype=np.float64)
+                max_global_idx = np.empty(n_events, dtype=np.int64)
+                for i in range(n_events):
+                    si = start_indices[i]
+                    ei = end_indices[i]
+                    if si == ei:
+                        max_vals[i] = data_int[si] / 10000.0
+                        max_global_idx[i] = si
+                    else:
+                        arr_conv = np.convolve(
+                            data_int[si:ei + 1], ones_kernel, "same"
+                        )
+                        ll_idx = np.nanargmax(arr_conv)
+                        max_vals[i] = arr_conv[ll_idx] / 10000.0
+                        max_global_idx[i] = si + ll_idx
+            elif method == "njit":
+                max_vals_int, max_global_idx = _smev_inner_loop_numba_seq(
+                    data_int, start_indices, end_indices, window_size, n_events
+                )
+                max_vals = max_vals_int / 10000.0
+            else:  # njit_parallel
+                max_vals_int, max_global_idx = _smev_inner_loop_numba(
+                    data_int, start_indices, end_indices, window_size, n_events
+                )
+                max_vals = max_vals_int / 10000.0
 
             ll_dates_arr = time_index[max_global_idx]
             ams_vals = np.array([
@@ -422,7 +454,12 @@ class TENAX:
 
         return dict_ordinary, dict_AMS
 
-    def associate_vars(self, dict_ordinary, data_temperature, dates_temperature):
+    def associate_vars(
+            self,
+            dict_ordinary,
+            data_temperature,
+            dates_temperature
+    ):
         """
         Associate temperature with an ordinary event based on its start datetime.
         The associated temperature is the mean of the past X hours, as defined by temp_time_hour.
@@ -516,7 +553,14 @@ class TENAX:
 
         return dict_ordinary, dict_dropped_oe, n_ordinary_per_year_new
     
-    def magnitude_model(self, data_oe_prec, data_oe_temp, thr, b_set = None, b_exp = False):
+    def magnitude_model(
+            self,
+            data_oe_prec,
+            data_oe_temp,
+            thr,
+            b_set=None,
+            b_exp=False
+    ):
         """
         Fits the data to the magnitude model of TENAX. 
 
@@ -556,7 +600,7 @@ class TENAX:
         init_g = self.init_param_guess
         alpha = self.alpha
         
-        if b_set: 
+        if b_set:
             if b_exp:
                 min_phat_bset = minimize(lambda theta: -wbl_leftcensor_loglik_bset_bexp(theta, P, T, thr,b_set), 
                                        init_g, 
@@ -579,14 +623,11 @@ class TENAX:
                 loglik_H1, loglik_H0shape = None, None #TODO: figure this out, do we need these outputs?
             
         elif b_exp:
-            
             min_phat_H1 = minimize(lambda theta: -wbl_leftcensor_loglik_exp(theta, P, T, thr), 
                                    init_g, 
                                    method='Nelder-Mead')
             phat_H1 = min_phat_H1.x
 
-
-            
             min_phat_H0shape = minimize(lambda theta: -wbl_leftcensor_loglik_H0shape(theta, P, T, thr), 
                                    init_g, 
                                    method='Nelder-Mead',
@@ -600,7 +641,6 @@ class TENAX:
             lambda_LR_shape = -2*( loglik_H0shape - loglik_H1 )
             pval = chi2.sf(lambda_LR_shape, df=1)
             
-            
             if alpha==0 : # dependence of shape on T is always allowed 
                 phat = phat_H1;
                 loglik = loglik_H1;
@@ -614,17 +654,12 @@ class TENAX:
                 phat = phat_H0shape;
                 loglik = loglik_H0shape;
             
-
-
-
         else:
             min_phat_H1 = minimize(lambda theta: -wbl_leftcensor_loglik(theta, P, T, thr), 
                                    init_g, 
                                    method='Nelder-Mead')
             phat_H1 = min_phat_H1.x
 
-
-            
             min_phat_H0shape = minimize(lambda theta: -wbl_leftcensor_loglik_H0shape(theta, P, T, thr), 
                                    init_g, 
                                    method='Nelder-Mead',
@@ -638,19 +673,18 @@ class TENAX:
             lambda_LR_shape = -2*( loglik_H0shape - loglik_H1 )
             pval = chi2.sf(lambda_LR_shape, df=1)
             
-            
-            if alpha==0 : # dependence of shape on T is always allowed 
-                phat = phat_H1;
-                loglik = loglik_H1;
-            elif alpha==1 : # dependence of shape on T is never allowed 
-                phat = phat_H0shape;
-                loglik = loglik_H0shape;
-            elif pval<=alpha : # depends on stat. significance
-                phat = phat_H1;
-                loglik = loglik_H1;
+            if alpha == 0:  # dependence of shape on T is always allowed 
+                phat = phat_H1
+                loglik = loglik_H1
+            elif alpha == 1:  # dependence of shape on T is never allowed 
+                phat = phat_H0shape
+                loglik = loglik_H0shape
+            elif pval <= alpha:  # depends on stat. significance
+                phat = phat_H1
+                loglik = loglik_H1
             else:
-                phat = phat_H0shape;
-                loglik = loglik_H0shape;
+                phat = phat_H0shape
+                loglik = loglik_H0shape
                 
         return phat, loglik, loglik_H1, loglik_H0shape
     
@@ -822,7 +856,6 @@ class TENAX:
 
         return ret_lev, T_mc, P_mc
 
-
     def TNX_tenax_bootstrap_uncertainty(
         self, P, T, blocks_id, Ts, temp_method="norm", method_root_scalar="brentq"
     ):
@@ -919,6 +952,7 @@ class TENAX:
                 n_err += 1
 
         return F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err
+
 
 def wbl_leftcensor_loglik(theta, x, t, thr):
     """
@@ -1082,6 +1116,7 @@ def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
     loglik = loglik1 + loglik2
 
     return loglik
+
 
 def wbl_leftcensor_loglik_exp(theta, x, t, thr):
     """
@@ -1295,6 +1330,7 @@ def randdf(size, df, flag):
 
     return result.reshape((n, m))
 
+
 def MC_tSMEV_cdf(y, wbl_phat, n):
     """
     Vectorized version of the Monte Carlo SMEV CDF evaluation.
@@ -1374,7 +1410,6 @@ def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess, method_root_sc
             qnt[t] = result.root
 
     return qnt
-
 
 
 def inverse_magnitude_model(F_phat, eT, qs, b_exp=False):
