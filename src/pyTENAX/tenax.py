@@ -8,6 +8,7 @@ from scipy.optimize import curve_fit
 from typing import Union, Tuple, Dict
 from multiprocessing.dummy import Pool as ThreadPool
 
+
 class TENAX:
     def __init__(
         self,
