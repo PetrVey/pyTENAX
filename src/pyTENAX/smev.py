@@ -189,7 +189,6 @@ class SMEV:
         Args:
             data (Union[pd.DataFrame, np.ndarray]): Precipitation values.
             dates (np.ndarray): Timestamps of the precipitation data.
-                dtype must be datetime64[ns].
             name_col (str, optional): Column name to use when ``data`` is a
                 DataFrame. Defaults to "value".
             check_gaps (bool, optional): Remove events that fall within
@@ -210,6 +209,8 @@ class SMEV:
 
         if isinstance(data, pd.DataFrame):
             data = np.array(data[name_col])
+
+        dates = dates.astype("datetime64[ns]")
 
         above_threshold_indices = np.where(data >= self.min_rain)[0]
 
