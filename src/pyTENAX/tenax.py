@@ -39,29 +39,61 @@ class TENAX:
 
         The TEmperaturedependent Non-Asymptotic statistical model for eXtreme
         return levels (TENAX), is based on a parsimonious nonstationary and
-        non-asymptotic theoretical framework that incorporates temperature as a covariate
-        in a physically consistent manner.
+        non-asymptotic theoretical framework that incorporates temperature
+        as a covariate in a physically consistent manner.
 
         Args:
-            return_period (list[Union[int, float]]): Return periods [years].
-            durations (list[int]): Duration of interest [min].
-            beta (Union[float, int], optional): Shape parameter of the Generalized Normal for g(T). Defaults to 4.
-            temp_time_hour (int, optional): Time window to compute T [h]. Will be converted to negative if needed. Defaults to 24.
-            alpha (float, optional): Unitless significance level for the dependence of the shape on T. Defaults to 0.05.
+            return_period (list[Union[int, float]]):
+                Return periods [years].
+            durations (list[int]):
+                Duration of interest [min].
+            beta (Union[float, int], optional):
+                Shape parameter of the Generalized Normal for g(T).
+                Defaults to 4.
+            temp_time_hour (int, optional):
+                Time window to compute T [h].
+                Will be converted to negative if needed. Defaults to 24.
+            alpha (float, optional):
+                Unitless significance level for the
+                dependence of the shape on T.
+                Defaults to 0.05.
                 - alpha = 0 --> dependence of shape on T is always allowed.
                 - alpha = 1 --> dependence of shape on T is never allowed.
-                - 0 < alpha < 1 --> dependence of shape on T depends on statistical significance at the alpha-level.
-            n_monte_carlo (int, optional): Number of elements in the MC samples. Defaults to int(2e4).
-            tolerance (float, optional): Maximum allowed fraction of missing data in one year. If exceeded, year will be disregarded from samples. Defaults to 0.1.
-            min_event_duration (int, optional): Minimum event duration [min]. Defaults to 30.
-            storm_separation_time (int, optional): Separation time between independent storms [hours]. Defaults to 24.
-            left_censoring (list, optional): 2-elements list with the limits in probability of the data to be used for the parameters estimation. Defaults to [0, 1].
-            niter_smev (int, optional): Number of iterations for uncertainty for the SMEV model. Defaults to 100.
-            niter_tenax (int, optional): Number of iterations for uncertainty for the TENAX model. Defaults to 100.
-            temp_res_monte_carlo (float, optional): Resolution in T for the MC samples. Defaults to 0.001.
-            temp_delta (int, optional): Range in T of MC samples. Explores temperatures up to Tdelt degrees higher and lower of the observed ones. Defaults to 10.
-            init_param_guess (list, optional): Initial values of Weibull parameters for `fminsearch`. Defaults to [0.7, 0, 2, 0].
-            min_rain (Union[float, int], optional): Minimum rainfall value. Defaults to 0.
+                - 0 < alpha < 1 --> dependence of shape on T depends on 
+                statistical significance at the alpha-level.
+            n_monte_carlo (int, optional):
+                Number of elements in the MC samples. Defaults to int(2e4).
+            tolerance (float, optional):
+                Maximum allowed fraction of missing data in one year.
+                If exceeded, year will be disregarded from samples.
+                Defaults to 0.1.
+            min_event_duration (int, optional):
+                Minimum event duration [min]. Defaults to 30.
+            storm_separation_time (int, optional):
+                Separation time between independent storms [hours].
+                Defaults to 24.
+            left_censoring (list, optional):
+                2-elements list with the limits in probability of the data
+                to be used for the parameters estimation. Defaults to [0, 1].
+            niter_smev (int, optional):
+                Number of iterations for uncertainty for the SMEV model.
+                Defaults to 100.
+            niter_tenax (int, optional):
+                Number of iterations for uncertainty for the TENAX model.
+                Defaults to 100.
+            temp_res_monte_carlo (float, optional):
+                Resolution in T for the MC samples.
+                Defaults to 0.001.
+            temp_delta (int, optional):
+                Range in T of MC samples.
+                Explores temperatures up to Tdelt degrees higher
+                and lower of the observed ones. Defaults to 10.
+            init_param_guess (list, optional):
+                Initial values of Weibull parameters for `fminsearch`.
+                Defaults to [0.7, 0, 2, 0].
+            min_rain (Union[float, int], optional):
+                Minimum rainfall value. 
+                Defaults to 0.
         """
         self.return_period = return_period
         self.durations = durations
@@ -857,7 +889,13 @@ class TENAX:
         return ret_lev, T_mc, P_mc
 
     def TNX_tenax_bootstrap_uncertainty(
-        self, P, T, blocks_id, Ts, temp_method="norm", method_root_scalar="brentq"
+        self,
+        P,
+        T,
+        blocks_id,
+        Ts,
+        temp_method="norm",
+        method_root_scalar="brentq"
     ):
         """
         Bootstrap uncertainty estimation for the TENAX model.
@@ -927,9 +965,17 @@ class TENAX:
 
                 # TENAX model components
                 # Magnitude model
-                F_phat_temporary, loglik_temp, _, _ = self.magnitude_model(Pr, Tr, thr)
+                F_phat_temporary, loglik_temp, _, _ = self.magnitude_model(
+                    Pr,
+                    Tr,
+                    thr
+                    )
+                
                 # Temperature model
-                g_phat_temporary = self.temperature_model(Tr, method=temp_method)
+                g_phat_temporary = self.temperature_model(
+                    Tr,
+                    method=temp_method
+                    )
                 # Mean number of events per block
                 n_temporary = len(Pr) / M
                 # Estimate return levels using Monte Carlo samples
