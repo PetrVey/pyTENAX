@@ -7,5 +7,10 @@
   {
     "timestamp": "2026-04-20T00:00:00Z",
     "count": 0
+  },
+  {
+    "timestamp": "2026-04-20T00:00:00Z",
+    "count": 17,
+    "uniques": 7
   }
 ]
