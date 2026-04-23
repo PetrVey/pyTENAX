@@ -42,58 +42,52 @@ class TENAX:
         non-asymptotic theoretical framework that incorporates temperature
         as a covariate in a physically consistent manner.
 
-        Args:
-            return_period (list[Union[int, float]]):
-                Return periods [years].
-            durations (list[int]):
-                Duration of interest [min].
-            beta (Union[float, int], optional):
-                Shape parameter of the Generalized Normal for g(T).
-                Defaults to 4.
-            temp_time_hour (int, optional):
-                Time window to compute T [h].
-                Will be converted to negative if needed. Defaults to 24.
-            alpha (float, optional):
-                Unitless significance level for the
-                dependence of the shape on T.
-                Defaults to 0.05.
-                - alpha = 0 --> dependence of shape on T is always allowed.
-                - alpha = 1 --> dependence of shape on T is never allowed.
-                - 0 < alpha < 1 --> dependence of shape on T depends on 
-                statistical significance at the alpha-level.
-            n_monte_carlo (int, optional):
-                Number of elements in the MC samples. Defaults to int(2e4).
-            tolerance (float, optional):
-                Maximum allowed fraction of missing data in one year.
-                If exceeded, year will be disregarded from samples.
-                Defaults to 0.1.
-            min_event_duration (int, optional):
-                Minimum event duration [min]. Defaults to 30.
-            storm_separation_time (int, optional):
-                Separation time between independent storms [hours].
-                Defaults to 24.
-            left_censoring (list, optional):
-                2-elements list with the limits in probability of the data
-                to be used for the parameters estimation. Defaults to [0, 1].
-            niter_smev (int, optional):
-                Number of iterations for uncertainty for the SMEV model.
-                Defaults to 100.
-            niter_tenax (int, optional):
-                Number of iterations for uncertainty for the TENAX model.
-                Defaults to 100.
-            temp_res_monte_carlo (float, optional):
-                Resolution in T for the MC samples.
-                Defaults to 0.001.
-            temp_delta (int, optional):
-                Range in T of MC samples.
-                Explores temperatures up to Tdelt degrees higher
-                and lower of the observed ones. Defaults to 10.
-            init_param_guess (list, optional):
-                Initial values of Weibull parameters for `fminsearch`.
-                Defaults to [0.7, 0, 2, 0].
-            min_rain (Union[float, int], optional):
-                Minimum rainfall value. 
-                Defaults to 0.
+        Parameters
+        ----------
+        return_period : list[Union[int, float]]
+            Return periods [years].
+        durations : list[int]
+            Durations of interest [min].
+        time_resolution : int
+            Temporal resolution of the precipitation data [min].
+        beta : Union[float, int], optional
+            Shape parameter of the Generalized Normal for g(T). Defaults to 4.
+        temp_time_hour : int, optional
+            Time window to compute T [h]. Will be converted to negative if
+            needed. Defaults to 24.
+        alpha : float, optional
+            Unitless significance level for the dependence of the shape on T.
+            Defaults to 0.05.
+            0 → dependence always allowed; 1 → never allowed;
+            (0, 1) → depends on statistical significance at alpha-level.
+        n_monte_carlo : int, optional
+            Number of elements in the MC samples. Defaults to int(2e4).
+        tolerance : float, optional
+            Maximum allowed fraction of missing data in one year.
+            If exceeded, year will be disregarded. Defaults to 0.1.
+        min_event_duration : int, optional
+            Minimum event duration [min]. Defaults to 30.
+        storm_separation_time : int, optional
+            Separation time between independent storms [hours]. Defaults to 24.
+        left_censoring : list, optional
+            2-element list with lower and upper probability limits for
+            parameter estimation. Defaults to [0, 1].
+        niter_smev : int, optional
+            Number of bootstrap iterations for SMEV uncertainty. Defaults to
+            100.
+        niter_tenax : int, optional
+            Number of bootstrap iterations for TENAX uncertainty. Defaults to
+            100.
+        temp_res_monte_carlo : float, optional
+            Resolution in T for the MC samples. Defaults to 0.001.
+        temp_delta : int, optional
+            Range in T of MC samples — explores temperatures up to this many
+            degrees above and below observed values. Defaults to 10.
+        init_param_guess : list, optional
+            Initial values of Weibull parameters for optimisation.
+            Defaults to [0.7, 0, 2, 0].
+        min_rain : Union[float, int], optional
+            Minimum rainfall value. Defaults to 0.
         """
         self.return_period = return_period
         self.durations = durations
@@ -121,23 +115,26 @@ class TENAX:
         name_col="value",
         nan_to_zero=True,
     ) -> pd.DataFrame:
-        """Function that delete incomplete years in precipitation data.
+        """Delete incomplete years in precipitation data.
+
         An incomplete year is defined as a year where observations are
         missing above a given threshold.
 
-        Args:
-            data_pr (pd.DataFrame):
-                Dataframe containing (hourly) precipitation values.
-            name_col (str, optional):
-                Column name in `data_pr` with precipitation values.
-                Defaults to "value".
-            nan_to_zero (bool, optional):
-                Set `nan` to zero. Defaults to True.
+        Parameters
+        ----------
+        data_pr : pd.DataFrame
+            Dataframe containing (hourly) precipitation values.
+        name_col : str, optional
+            Column name in `data_pr` with precipitation values.
+            Defaults to "value".
+        nan_to_zero : bool, optional
+            Set `nan` to zero. Defaults to True.
 
-        Returns:
-            pd.DataFrame:
-                Dataframe containing (hourly) precipitation values
-                with incomplete years removed.
+        Returns
+        -------
+        pd.DataFrame
+            Dataframe containing (hourly) precipitation values
+            with incomplete years removed.
         """
         # Step 1: get resolution of dataset (MUST BE SAME in whole dataset!!!)
         time_res = (
@@ -196,19 +193,25 @@ class TENAX:
         events separated by at least ``self.storm_separation_time`` hours.
         Optionally removes events too close to dataset boundaries or data gaps.
 
-        Args:
-            data (Union[pd.DataFrame, np.ndarray]): Precipitation values.
-            dates (np.ndarray): Timestamps of the precipitation data.
-            name_col (str, optional): Column name to use when ``data`` is a
-                DataFrame. Defaults to "value".
-            check_gaps (bool, optional): Remove events that fall within
-                ``storm_separation_time`` of the dataset boundaries or
-                internal data gaps. Defaults to True.
+        Parameters
+        ----------
+        data : Union[pd.DataFrame, np.ndarray]
+            Precipitation values.
+        dates : np.ndarray
+            Timestamps of the precipitation data.
+        name_col : str, optional
+            Column name to use when ``data`` is a DataFrame. Defaults to
+            "value".
+        check_gaps : bool, optional
+            Remove events that fall within ``storm_separation_time`` of the
+            dataset boundaries or internal data gaps. Defaults to True.
 
-        Returns:
-            list: List of np.ndarray, each containing the timestamps of one
-                ordinary event (values >= ``self.min_rain`` separated by
-                more than ``self.storm_separation_time`` hours).
+        Returns
+        -------
+        list
+            List of np.ndarray, each containing the timestamps of one ordinary
+            event (values >= ``self.min_rain`` separated by more than
+            ``self.storm_separation_time`` hours).
         """
         if not self.__incomplete_years_removed__:
             raise ValueError(
@@ -319,21 +322,24 @@ class TENAX:
     def remove_short(
         self,
         list_ordinary: list,
-    ) -> Tuple[np.ndarray, np.ndarray, pd.Series]:
-        """Function that removes ordinary events that are too short.
+    ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
+        """Remove ordinary events that are too short.
 
-        Args:
-            list_ordinary (list): list of ordinary events as returned by
-                `get_ordinary_events()`. Each event may contain pd.Timestamp
-                or np.datetime64 values.
+        Parameters
+        ----------
+        list_ordinary : list
+            List of ordinary events as returned by `get_ordinary_events()`.
+            Each event may contain pd.Timestamp or np.datetime64 values.
 
-        Returns:
-            arr_vals (np.ndarray): Array with indices of events that are
-                not too short.
-            arr_dates (np.ndarray): Array with tuple consisting of start
-                and end dates of events that are not too short.
-            n_ordinary_per_year (pd.Series): Series with the number of
-                ordinary events per year.
+        Returns
+        -------
+        arr_vals : np.ndarray
+            Boolean array (all True) of length equal to the number of kept
+            events, one entry per event that passed the duration filter.
+        arr_dates : np.ndarray
+            Array of (end, start) date tuples for each kept event.
+        n_ordinary_per_year : pd.DataFrame
+            DataFrame with the count of ordinary events per year.
         """
         if not self.__incomplete_years_removed__:
             raise ValueError(
@@ -388,29 +394,32 @@ class TENAX:
     ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, pd.DataFrame]]:
         """Extract ordinary events and annual maxima from precipitation data.
 
-        Args:
-            data (np.ndarray): Full precipitation time series.
-            dates (np.ndarray): Timestamps of the full precipitation dataset.
-            arr_dates_oe (np.ndarray): End and start times of ordinary events
-                as returned by ``remove_short``.
-            method (str, optional):
-                Backend used for the sliding-window maximum search. Defaults
-                to ``"vectorized"``. One of:
+        Parameters
+        ----------
+        data : np.ndarray
+            Full precipitation time series.
+        dates : np.ndarray
+            Timestamps of the full precipitation dataset.
+        arr_dates_oe : np.ndarray
+            End and start times of ordinary events as returned by
+            `remove_short`.
+        method : str, optional
+            Backend used for the sliding-window maximum search. Defaults to
+            ``"vectorized"``. One of:
 
-                - ``"vectorized"``    — pure numpy, ``np.convolve`` per event.
-                - ``"njit"``          — numba JIT-compiled loop, single-threaded.
-                - ``"njit_parallel"`` — numba JIT-compiled loop, parallelised
-                  over events. Requires ``numba`` to be installed.
+            - ``"vectorized"``    — pure numpy, ``np.convolve`` per event.
+            - ``"njit"``          — numba JIT-compiled loop, single-threaded.
+            - ``"njit_parallel"`` — numba JIT-compiled loop, parallelised
+              over events. Requires ``numba`` to be installed.
 
-        Returns:
-            dict_ordinary (dict): Key is duration (str), value is a
-                ``pd.DataFrame`` with columns ``year``, ``oe_time``,
-                ``ordinary`` (event depth/intensity).
-                Example: ``{"10": pd.DataFrame(
-                    columns=['year', 'oe_time', 'ordinary'])}``.
-            dict_AMS (dict): Key is duration (str), value is a
-                ``pd.DataFrame`` with columns ``year`` and ``AMS``
-                (annual maximum value).
+        Returns
+        -------
+        dict_ordinary : dict
+            Key is duration (str), value is a ``pd.DataFrame`` with columns
+            ``year``, ``oe_time``, ``ordinary`` (event depth/intensity).
+        dict_AMS : dict
+            Key is duration (str), value is a ``pd.DataFrame`` with columns
+            ``year`` and ``AMS`` (annual maximum value).
         """
         if method in ("njit", "njit_parallel") and not _NUMBA_AVAILABLE:
             raise ImportError(
@@ -492,27 +501,34 @@ class TENAX:
             data_temperature,
             dates_temperature
     ):
-        """
-        Associate temperature with an ordinary event 
-        based on its start datetime.
-        The associated temperature is the mean of the past X hours,
-        as defined by temp_time_hour.
-        The ordinary event is removed if a corresponding temperature
-        cannot be found.
-        
+        """Associate temperature with each ordinary event.
+
+        The associated temperature is the mean over the past ``temp_time_hour``
+        hours before the event. Events for which no temperature can be found
+        are dropped.
+
         Parameters
         ----------
-        dict_ordinary (dict) : dictionary of ordinary events as retruned by get_ordinary_events_values function
-        data_temperature (np.ndarray): data of full precipitation dataset
-        dates_temperature (np.ndarray): time of full precipitation dataset
+        dict_ordinary : dict
+            Dictionary of ordinary events as returned by
+            `get_ordinary_events_values`.
+        data_temperature : np.ndarray
+            Full temperature time series.
+        dates_temperature : np.ndarray
+            Timestamps of the full temperature dataset.
 
         Returns
         -------
-        dict_ordinary (dict) : A dictionary of ordinary events with associated temperature, categorized by duration
-                               example dict_ordinary = {"10" : pd.DataFrame(columns=['year', 'oe_time', 'ordinary', 'T'])
-        dict_dropped_oe (dict): A dictionary of dropped ordinary events for which the associated temperature was not found, categorized by duration
-        n_ordinary_per_year_new (pd.Series): Series with the number of ordinary events per year
-
+        dict_ordinary : dict
+            Ordinary events with an added ``T`` column, keyed by duration.
+            Example: ``{"10": pd.DataFrame(
+                columns=['year', 'oe_time', 'ordinary', 'T'])}``.
+        dict_dropped_oe : dict
+            Ordinary events dropped because no temperature was found,
+            keyed by duration.
+        n_ordinary_per_year_new : pd.DataFrame
+            DataFrame with the count of ordinary events per year after
+            dropping events without temperature.
         """
         # start here
         dict_dropped_oe = {}
@@ -615,15 +631,16 @@ class TENAX:
 
         Returns
         -------
-        phat : numpy.ndarray
-            Parameters of the magnitude model. [kappa_0,b,lambda_0,a].
-        loglik : numpy.float64
-            Log likelihood.
-        loglik_H1 : numpy.float64
-            Log likelihood of alternative hypothesis.
-        loglik_H0shape : numpy.float64
-            Log likelihood of null hypothesis.
-
+        phat : np.ndarray
+            Fitted parameters ``[kappa_0, b, lambda_0, a]``.
+        loglik : float
+            Log-likelihood of the selected model.
+        loglik_H1 : float or None
+            Log-likelihood of the alternative hypothesis (H1). ``None`` when
+            ``b_set`` is provided.
+        loglik_H0shape : float or None
+            Log-likelihood of the null hypothesis (constant shape). ``None``
+            when ``b_set`` is provided.
         """
         # alpha=0 --> dependence of shape on T is always allowed 
         # alpha=1 --> dependence of shape on T is never allowed 
@@ -724,24 +741,24 @@ class TENAX:
         return phat, loglik, loglik_H1, loglik_H0shape
     
     def temperature_model(self, data_oe_temp, beta=0, method="norm"):
-        """
-        Fits the temperature data to the TENAX temperature model.
+        """Fit temperature data to the TENAX temperature model.
 
         Parameters
         ----------
-        data_oe_temp : numpy.ndarray
+        data_oe_temp : np.ndarray
             Temperature data.
         beta : float, optional
-            beta of the generalised normal distribution. if not defined, uses the beta defined in S. The default is 4.
-        method : string, optional
-            Type of fit. "norm" is for the generalised normal distribution. "skewnorm" is for a skewed normal distribution. The default is "norm".
+            Shape parameter of the generalised normal distribution. If 0,
+            uses ``self.beta``. Defaults to 0.
+        method : str, optional
+            Distribution to fit. ``"norm"`` uses the generalised normal;
+            ``"skewnorm"`` uses a skewed normal. Defaults to ``"norm"``.
 
         Returns
         -------
-        g_phat (np.array): parameters of the temperature distribution. 
-                           if "norm", [shape,scale]. 
-                           if "skewnorm", [alpha,loc,scale] alpha controls skewness, loc is mean, scale is std
-
+        g_phat : np.ndarray
+            Fitted parameters. ``[mu, sigma]`` for ``"norm"``;
+            ``[alpha, loc, scale]`` for ``"skewnorm"``.
         """
         if beta == 0:
             beta = self.beta
@@ -823,13 +840,15 @@ class TENAX:
 
         Returns
         -------
-        ret_lev : list 
-            Return levels at periods specified in self.return_period.
-        T_mc : numpy.ndarray
-            Monte Carlo generated temperature values.
-        P_mc : numpy.ndarray
-            Monte Carlo generated precipitation values.
-
+        ret_lev : np.ndarray or list
+            Return levels at periods specified in ``self.return_period``.
+            Empty list ``[]`` if ``gen_RL=False``.
+        T_mc : np.ndarray
+            Monte Carlo generated temperature values, shape
+            ``(n_monte_carlo, 1)``.
+        P_mc : np.ndarray or list
+            Monte Carlo generated precipitation values. Empty list ``[]``
+            if ``gen_P_mc=False``.
         """
 
         P_mc = []
@@ -902,26 +921,42 @@ class TENAX:
         temp_method="norm",
         method_root_scalar="brentq"
     ):
-        """
-        Bootstrap uncertainty estimation for the TENAX model.
+        """Bootstrap uncertainty estimation for the TENAX model.
 
-        Parameters:
-        - P: numpy array of precipitation data.
-        - T: numpy array of temperature data.
-        - blocks_id: numpy array of block identifiers (e.g., years).
-        - perc_thres: percentile threshold for left-censoring.
-        - S: object containing model parameters and methods.
-        - RP: return periods (numpy array).
-        - N: number of Monte Carlo simulations.
-        - Ts: time scales (numpy array).
-        - niter: number of bootstrap iterations.
+        Parameters
+        ----------
+        P : np.ndarray
+            Precipitation ordinary events data.
+        T : np.ndarray
+            Temperature ordinary events data.
+        blocks_id : np.ndarray
+            Block identifiers (e.g., years) for each event.
+        Ts : np.ndarray
+            Array of temperature values for the Monte Carlo integration.
+        temp_method : str, optional
+            Distribution used for the temperature model. Defaults to
+            ``"norm"``.
+        method_root_scalar : str, optional
+            Root-finding method for model inversion. Defaults to
+            ``"brentq"``.
 
-        Returns:
-        - F_phat_unc: array of magnitude model parameters from bootstrap samples.
-        - g_phat_unc: array of temperature model parameters from bootstrap samples.
-        - RL_unc: array of estimated return levels from bootstrap samples.
-        - n_unc: array of mean number of events per block from bootstrap samples.
-        - n_err: number of iterations where the model fitting failed.
+        Returns
+        -------
+        F_phat_unc : np.ndarray
+            Magnitude model parameters from each bootstrap sample,
+            shape ``(niter, 4)``.
+        g_phat_unc : np.ndarray
+            Temperature model parameters from each bootstrap sample,
+            shape ``(niter, 2)`` for ``"norm"`` or ``(niter, 3)`` for
+            ``"skewnorm"``.
+        RL_unc : np.ndarray
+            Return levels from each bootstrap sample,
+            shape ``(niter, len(return_period))``.
+        n_unc : np.ndarray
+            Mean number of events per block from each bootstrap sample,
+            shape ``(niter,)``.
+        n_err : int
+            Number of iterations where model fitting failed.
         """
 
         perc_thres = self.left_censoring[1]
@@ -1006,28 +1041,26 @@ class TENAX:
 
 
 def wbl_leftcensor_loglik(theta, x, t, thr):
-    """
-    Computes the log-likelihood for a left-censored Weibull distribution with temperature-dependent parameters.
-    
-    This function models precipitation using a Weibull distribution (tail model), where the shape and scale parameters depend on temperature.
-    Observations of precipitation below the threshold are left-censored, meaning their exact values are unknown.
+    """Compute log-likelihood for a left-censored Weibull distribution.
+
+    Shape and scale parameters depend linearly on temperature. Observations
+    below the threshold are left-censored.
 
     Parameters
     ----------
-    theta : float
-        initial guess for fit.
-    x : numpy.ndarray
-        precipitation values.
-    t : numpy.ndarray
-        temperature values.
+    theta : array-like
+        Parameter vector ``[kappa_0, b, lambda_0, a]``.
+    x : np.ndarray
+        Precipitation values.
+    t : np.ndarray
+        Temperature values.
     thr : float
-        threshold value for left-censoring.
+        Left-censoring threshold.
 
     Returns
     -------
-    loglik : TYPE
-        DESCRIPTION.
-
+    float
+        Log-likelihood value.
     """
     # theta is init guess
     # x is precipitaon\
@@ -1059,29 +1092,27 @@ def wbl_leftcensor_loglik(theta, x, t, thr):
 
 
 def wbl_leftcensor_loglik_H0shape(theta, x, t, thr):
-    """
-    Computes the log-likelihood for a left-censored Weibull distribution with temperature-dependent parameters, 
-    where the b parameter of the Weibull shape parameter is not used (meaning b=0).
-    
-    This function models precipitation using a Weibull distribution (tail model), where the shape and scale parameters depend on temperature.
-    Observations of precipitation below the threshold are left-censored, meaning their exact values are unknown.
+    """Compute log-likelihood for a left-censored Weibull with constant shape (H0).
+
+    Same as `wbl_leftcensor_loglik` but with ``b=0``, i.e. shape does not
+    depend on temperature. Used as the null hypothesis in the likelihood-ratio
+    test.
 
     Parameters
     ----------
-    theta : float
-        initial guess for fit.
-    x : numpy.ndarray
-        precipitation values.
-    t : numpy.ndarray
-        temperature values.
+    theta : array-like
+        Parameter vector ``[kappa_0, b, lambda_0, a]`` (``b`` is ignored).
+    x : np.ndarray
+        Precipitation values.
+    t : np.ndarray
+        Temperature values.
     thr : float
-        threshold value for left-censoring.
+        Left-censoring threshold.
 
     Returns
     -------
-    loglik : TYPE
-        DESCRIPTION.
-
+    float
+        Log-likelihood value.
     """
     # theta is init guess
     # x is precipitaon\
@@ -1114,31 +1145,29 @@ def wbl_leftcensor_loglik_H0shape(theta, x, t, thr):
 
 
 def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
-    """
-    Computes the log-likelihood for a left-censored Weibull distribution with temperature-dependent parameters, 
-    where the b parameter of the Weibull shape parameter is set by the user.
-    
-    This function models precipitation using a Weibull distribution (tail model), where the shape and scale parameters depend on temperature.
-    Observations of precipitation below the threshold are left-censored, meaning their exact values are unknown.
-    
+    """Compute log-likelihood for a left-censored Weibull with fixed b.
+
+    Same as `wbl_leftcensor_loglik` but ``b`` is fixed to ``b_set`` and not
+    optimised.
+
     Parameters
     ----------
-    theta : float
-        initial guess for fit.
-    x : numpy.ndarray
-        precipitation values.
-    t : numpy.ndarray
-        temperature values.
+    theta : array-like
+        Parameter vector ``[kappa_0, b, lambda_0, a]`` (``b`` is overridden
+        by ``b_set``).
+    x : np.ndarray
+        Precipitation values.
+    t : np.ndarray
+        Temperature values.
     thr : float
-        threshold value for left-censoring.
+        Left-censoring threshold.
     b_set : float
-        chosen b value that will not change
+        Fixed value of ``b`` (shape temperature-dependence parameter).
 
     Returns
     -------
-    loglik : TYPE
-        DESCRIPTION.
-
+    float
+        Log-likelihood value.
     """
     # theta is init guess
     # x is precipitaon\
@@ -1170,30 +1199,27 @@ def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
 
 
 def wbl_leftcensor_loglik_exp(theta, x, t, thr):
-    """
-    TODO: I dont understand these things
+    """Compute log-likelihood for a left-censored Weibull with exponential shape.
+
+    Like `wbl_leftcensor_loglik` but shape depends exponentially on
+    temperature: ``shape = kappa_0 * exp(b * T)``.
 
     Parameters
     ----------
-    theta : float
-        initial guess for fit.
-    x : numpy.ndarray
-        precipitation values.
-    t : numpy.ndarray
-        temperature values.
+    theta : array-like
+        Parameter vector ``[kappa_0, b, lambda_0, a]``.
+    x : np.ndarray
+        Precipitation values.
+    t : np.ndarray
+        Temperature values.
     thr : float
-        threshold value for left-censoring.
+        Left-censoring threshold.
 
     Returns
     -------
-    loglik : TYPE
-        DESCRIPTION.
-
+    float
+        Log-likelihood value.
     """
-    #theta is init guess
-    # x is precipitaon\
-    # t is temperature
-    # thr is threshold value (exact, no percentual)
     a_w = theta[0]
     b_w = theta[1]
     a_C = theta[2]
@@ -1220,30 +1246,31 @@ def wbl_leftcensor_loglik_exp(theta, x, t, thr):
 
 
 def wbl_leftcensor_loglik_bset_bexp(theta, x, t, thr, b_set):
-    """
-    TODO: I dont understand these things
+    """Compute log-likelihood for a left-censored Weibull: exponential shape, fixed b.
+
+    Combines `wbl_leftcensor_loglik_exp` and `wbl_leftcensor_loglik_bset`:
+    shape depends exponentially on temperature and ``b`` is fixed to
+    ``b_set``.
 
     Parameters
     ----------
-    theta : float
-        initial guess for fit.
-    x : numpy.ndarray
-        precipitation values.
-    t : numpy.ndarray
-        temperature values.
+    theta : array-like
+        Parameter vector ``[kappa_0, b, lambda_0, a]`` (``b`` is overridden
+        by ``b_set``).
+    x : np.ndarray
+        Precipitation values.
+    t : np.ndarray
+        Temperature values.
     thr : float
-        threshold value for left-censoring.
+        Left-censoring threshold.
+    b_set : float
+        Fixed value of ``b``.
 
     Returns
     -------
-    loglik : TYPE
-        DESCRIPTION.
-
+    float
+        Log-likelihood value.
     """
-    #theta is init guess
-    # x is precipitaon\
-    # t is temperature
-    # thr is threshold value (exact, no percentual)
     a_w = theta[0]
     b_w = b_set
     a_C = theta[2]
@@ -1270,38 +1297,45 @@ def wbl_leftcensor_loglik_bset_bexp(theta, x, t, thr, b_set):
 
 
 def gen_norm_pdf(x: np.ndarray, mu: float, sigma: float, beta: float) -> np.ndarray:
-    """
-    Function computing the Generalized normal distribution PDF.
+    """Compute the Generalized normal distribution PDF.
 
     Parameters
     ----------
-        x (np.ndarray): Data points.
-        mu (float): Location parameter.
-        sigma (float): Scale parameter.
-        beta (float): Snape parameter.
+    x : np.ndarray
+        Data points.
+    mu : float
+        Location parameter.
+    sigma : float
+        Scale parameter.
+    beta : float
+        Shape parameter.
 
     Returns
     -------
-        np.ndarray: Generalized normal distribution PDF
+    np.ndarray
+        Generalized normal distribution PDF values.
     """
     coeff = beta / (2 * sigma * gamma(1 / beta))
     exponent = -((np.abs(x - mu) / sigma) ** beta)
     return coeff * np.exp(exponent)
 
 
-def gen_norm_loglik(x: np.ndarray, par: list, beta: float) -> np.ndarray:
-    """
-    Function computing the Log-likelihood for the Generalized normal distribution.
+def gen_norm_loglik(x: np.ndarray, par: list, beta: float) -> float:
+    """Compute the log-likelihood for the Generalized normal distribution.
 
     Parameters
     ----------
-        x (np.ndarray): Data points.
-        par (list): List of parameters [mu, sigma].
-        beta (float): Snape parameter.
+    x : np.ndarray
+        Data points.
+    par : list
+        Parameters ``[mu, sigma]``.
+    beta : float
+        Shape parameter.
 
     Returns
     -------
-        np.ndarray: Log-likelihood for the Generalized normal distribution.
+    float
+        Log-likelihood value.
     """
     # Compute the log-likelihood
     pdf = gen_norm_pdf(x, par[0], par[1], beta)
@@ -1316,24 +1350,25 @@ def gen_norm_loglik(x: np.ndarray, par: list, beta: float) -> np.ndarray:
 
 
 def randdf(size, df, flag):
-    """
-    This function generates random numbers according to a user-defined probability
-    density function (pdf) or cumulative distribution function (cdf).
-    This is pythonized version of Matlab f randdf coded by halleyhit on Aug. 15th, 2018
-    % Email: halleyhit@sjtu.edu.cn or halleyhit@163.com
+    """Generate random numbers from a user-defined PDF or CDF.
+
+    Pythonised version of MATLAB's randdf coded by halleyhit on Aug. 15th,
+    2018. Email: halleyhit@sjtu.edu.cn or halleyhit@163.com
 
     Parameters
     ----------
-    size (int or tuple): Size of the output array. E.g., size=10 creates a 10-by-1 array,
-                         size=(10, 2) creates a 10-by-2 matrix.
-    df (numpy.ndarray): Density function, should be a 2-row matrix where the first row
-                        represents the function values and the second row represents
-                        sampling points.
-    flag (str): Flag to indicate 'pdf' or 'cdf'.
+    size : int or tuple
+        Output size. ``10`` → 1-D array of 10; ``(10, 2)`` → 10×2 matrix.
+    df : np.ndarray
+        2-row matrix: first row is function values (PDF or CDF), second row
+        is the corresponding sampling points.
+    flag : str
+        ``"pdf"`` or ``"cdf"``.
 
     Returns
     -------
-    numpy.ndarray: Array of random samples based on the defined pdf or cdf.
+    np.ndarray
+        Random samples drawn according to the defined distribution.
     """
 
     # Determine output dimensions
@@ -1383,16 +1418,21 @@ def randdf(size, df, flag):
 
 
 def MC_tSMEV_cdf(y, wbl_phat, n):
-    """
-    Vectorized version of the Monte Carlo SMEV CDF evaluation.
-    
-    Parameters:
-    y (float or array-like): Value(s) at which to evaluate the CDF.
-    wbl_phat (numpy.ndarray): Array of Weibull parameters (N x 2) for [scale, shape].
-    n (float): Power to raise the average probability.
-    
-    Returns:
-    float or ndarray: CDF value(s) for input y.
+    """Evaluate the Monte Carlo SMEV CDF at given values.
+
+    Parameters
+    ----------
+    y : float or array-like
+        Value(s) at which to evaluate the CDF.
+    wbl_phat : np.ndarray
+        Weibull parameters, shape ``(N, 2)``: columns are ``[scale, shape]``.
+    n : float
+        Power applied to the average probability.
+
+    Returns
+    -------
+    np.ndarray
+        CDF value(s) for input ``y``.
     """
     y = np.atleast_1d(y)  # Ensure y is array
     scale = wbl_phat[:, 0]
@@ -1410,17 +1450,25 @@ def MC_tSMEV_cdf(y, wbl_phat, n):
 
 
 def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess, method_root_scalar):
-    """
-    Invert to find quantiles corresponding to the target return periods.
-    
-    Parameters:
-    wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
-    n (int): Power to raise the final probability to.
-    target_return_periods (list or array-like): Desired target return periods.
-    vguess (numpy.ndarray): Initial guesses for inversion.
-    
-    Returns:
-    numpy.ndarray: Quantiles corresponding to the target return periods.
+    """Invert the MC-SMEV CDF to find quantiles for target return periods.
+
+    Parameters
+    ----------
+    wbl_phat : np.ndarray
+        Weibull parameters, shape ``(N, 2)``: columns are ``[scale, shape]``.
+    n : float
+        Power applied to the average probability.
+    target_return_periods : list or array-like
+        Desired return periods.
+    vguess : np.ndarray
+        Initial value grid for root-finding.
+    method_root_scalar : str
+        Root-finding method passed to ``scipy.optimize.root_scalar``.
+
+    Returns
+    -------
+    np.ndarray
+        Quantiles corresponding to each target return period.
     """
     if not isinstance(n, float): #if n is numpy or panda series, this should give u just float
         n = float(n.values[0]) 
@@ -1471,8 +1519,8 @@ def inverse_magnitude_model(F_phat, eT, qs, b_exp=False):
     ----------
     F_phat : numpy.ndarray
         distribution values. F_phat = [kappa_0,b,lambda_0,a].
-    x : numpy.ndarray
-        x (temperature) values from which to produce distribution.
+    eT : numpy.ndarray
+        Temperature values from which to produce distribution.
     qs : list
         list of percentiles to calculate (between 0 and 1). e.g. [0.85,0.95,0.99].
     b_exp : bool
