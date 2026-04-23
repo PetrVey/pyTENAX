@@ -493,9 +493,12 @@ class TENAX:
             dates_temperature
     ):
         """
-        Associate temperature with an ordinary event based on its start datetime.
-        The associated temperature is the mean of the past X hours, as defined by temp_time_hour.
-        The ordinary event is removed if a corresponding temperature cannot be found.
+        Associate temperature with an ordinary event 
+        based on its start datetime.
+        The associated temperature is the mean of the past X hours,
+        as defined by temp_time_hour.
+        The ordinary event is removed if a corresponding temperature
+        cannot be found.
         
         Parameters
         ----------
@@ -846,16 +849,18 @@ class TENAX:
 
         # Generates random P according to the magnitude model
         if b_exp:
+            # exponential model for b
             wbl_phat = np.column_stack((
                                         F_phat[2] * np.exp(F_phat[3] * T_mc),
                                         F_phat[0] * np.exp(F_phat[1] * T_mc)
-                                        )) #exponential model for b
+                                        )) 
 
         else:
+            # linear model for b
             wbl_phat = np.column_stack((
                                         F_phat[2] * np.exp(F_phat[3] * T_mc),
                                         F_phat[0] + F_phat[1] * T_mc
-                                        )) #linear model for b
+                                        )) 
         # old vguess
         # vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05
         # test new vguess

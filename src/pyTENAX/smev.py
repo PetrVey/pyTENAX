@@ -22,21 +22,26 @@ try:
         Replicates np.convolve(..., 'same') but avoids Python overhead so
         numba can JIT-compile the entire loop.
 
-        Args:
-            data (np.ndarray[int64]): Full precipitation series scaled by
-                10000 (integer arithmetic avoids floating-point ties).
-            start_indices (np.ndarray[int64]): Index into `data` where each
-                event starts.
-            end_indices (np.ndarray[int64]): Index into `data` where each
-                event ends.
-            window_size (int): Number of timesteps in the aggregation window.
-            n_events (int): Total number of ordinary events.
+        Parameters
+        ----------
+        data : np.ndarray[int64]
+            Full precipitation series scaled by 10000 (integer arithmetic
+            avoids floating-point ties).
+        start_indices : np.ndarray[int64]
+            Index into `data` where each event starts.
+        end_indices : np.ndarray[int64]
+            Index into `data` where each event ends.
+        window_size : int
+            Number of timesteps in the aggregation window.
+        n_events : int
+            Total number of ordinary events.
 
-        Returns:
-            max_vals (np.ndarray[int64]): Maximum rolling sum (scaled) for
-                each event.
-            max_global_idx (np.ndarray[int64]): Index into `data` of the
-                window centre that achieves the maximum.
+        Returns
+        -------
+        max_vals : np.ndarray[int64]
+            Maximum rolling sum (scaled) for each event.
+        max_global_idx : np.ndarray[int64]
+            Index into `data` of the window centre that achieves the maximum.
         """
         max_vals = np.empty(n_events, dtype=np.int64)
         max_global_idx = np.empty(n_events, dtype=np.int64)
@@ -87,21 +92,26 @@ try:
         processed in parallel using numba's `prange`. Safe because each
         iteration writes to a unique output index.
 
-        Args:
-            data (np.ndarray[int64]): Full precipitation series scaled by
-                10000 (integer arithmetic avoids floating-point ties).
-            start_indices (np.ndarray[int64]): Index into `data` where each
-                event starts.
-            end_indices (np.ndarray[int64]): Index into `data` where each
-                event ends.
-            window_size (int): Number of timesteps in the aggregation window.
-            n_events (int): Total number of ordinary events.
+        Parameters
+        ----------
+        data : np.ndarray[int64]
+            Full precipitation series scaled by 10000 (integer arithmetic
+            avoids floating-point ties).
+        start_indices : np.ndarray[int64]
+            Index into `data` where each event starts.
+        end_indices : np.ndarray[int64]
+            Index into `data` where each event ends.
+        window_size : int
+            Number of timesteps in the aggregation window.
+        n_events : int
+            Total number of ordinary events.
 
-        Returns:
-            max_vals (np.ndarray[int64]): Maximum rolling sum (scaled) for
-                each event.
-            max_global_idx (np.ndarray[int64]): Index into `data` of the
-                window centre that achieves the maximum.
+        Returns
+        -------
+        max_vals : np.ndarray[int64]
+            Maximum rolling sum (scaled) for each event.
+        max_global_idx : np.ndarray[int64]
+            Index into `data` of the window centre that achieves the maximum.
         """
         # data must be int64 (scaled by 10000) so sums are exact —
         # no floating-point ties
@@ -161,28 +171,28 @@ class SMEV:
     ):
         """Initiates SMEV class.
 
-        Args:
-            return_period (list[Union[int, float]]):
-                List of return periods of interest [years].
-            durations (list[Union[int]]):
-                List of durations of interest [min].
-            time_resolution (int):
-                Temporal resolution of the precipitation data [min].
-            tolerance (float, optional):
-                Maximum allowed fraction of missing data in one year.
-                If exceeded, year will be disregarded from samples.
-                Defaults to 0.1.
-            min_event_duration (int, optional):
-                Minimum event duration [min]. Defaults to 30.
-            storm_separation_time (int, optional):
-                Separation time between independent storms [hours].
-                Defaults to 24.
-            left_censoring (list, optional):
-                2-elements list with the limits in probability
-                of the data to be used for the parameters estimation.
-                Defaults to [0, 1].
-            min_rain (Union[float, int], optional):
-                Minimum rainfall value. Defaults to 0.
+        Parameters
+        ----------
+        return_period : list[Union[int, float]]
+            List of return periods of interest [years].
+        durations : list[int]
+            List of durations of interest [min].
+        time_resolution : int
+            Temporal resolution of the precipitation data [min].
+        tolerance : float, optional
+            Maximum allowed fraction of missing data in one year.
+            If exceeded, year will be disregarded from samples.
+            Defaults to 0.1.
+        min_event_duration : int, optional
+            Minimum event duration [min]. Defaults to 30.
+        storm_separation_time : int, optional
+            Separation time between independent storms [hours].
+            Defaults to 24.
+        left_censoring : list, optional
+            2-elements list with the limits in probability of the data
+            to be used for the parameters estimation. Defaults to [0, 1].
+        min_rain : Union[float, int], optional
+            Minimum rainfall value. Defaults to 0.
         """
         self.return_period = return_period
         self.durations = durations
@@ -201,23 +211,26 @@ class SMEV:
         name_col="value",
         nan_to_zero=True,
     ) -> pd.DataFrame:
-        """Function that delete incomplete years in precipitation data.
+        """Delete incomplete years in precipitation data.
+
         An incomplete year is defined as a year where observations are
         missing above a given threshold.
 
-        Args:
-            data_pr (pd.DataFrame):
-                Dataframe containing (hourly) precipitation values.
-            name_col (str, optional):
-                Column name in `data_pr` with precipitation values.
-                Defaults to "value".
-            nan_to_zero (bool, optional):
-                Set `nan` to zero. Defaults to True.
+        Parameters
+        ----------
+        data_pr : pd.DataFrame
+            Dataframe containing (hourly) precipitation values.
+        name_col : str, optional
+            Column name in `data_pr` with precipitation values.
+            Defaults to "value".
+        nan_to_zero : bool, optional
+            Set `nan` to zero. Defaults to True.
 
-        Returns:
-            pd.DataFrame:
-                Dataframe containing (hourly) precipitation values
-                with incomplete years removed.
+        Returns
+        -------
+        pd.DataFrame
+            Dataframe containing (hourly) precipitation values
+            with incomplete years removed.
         """
         # Step 1: get resolution of dataset (MUST BE SAME in whole dataset!!!)
         time_res = (
@@ -276,19 +289,25 @@ class SMEV:
         events separated by at least ``self.storm_separation_time`` hours.
         Optionally removes events too close to dataset boundaries or data gaps.
 
-        Args:
-            data (Union[pd.DataFrame, np.ndarray]): Precipitation values.
-            dates (np.ndarray): Timestamps of the precipitation data.
-            name_col (str, optional): Column name to use when ``data`` is a
-                DataFrame. Defaults to "value".
-            check_gaps (bool, optional): Remove events that fall within
-                ``storm_separation_time`` of the dataset boundaries or
-                internal data gaps. Defaults to True.
+        Parameters
+        ----------
+        data : Union[pd.DataFrame, np.ndarray]
+            Precipitation values.
+        dates : np.ndarray
+            Timestamps of the precipitation data.
+        name_col : str, optional
+            Column name to use when ``data`` is a DataFrame. Defaults to
+            "value".
+        check_gaps : bool, optional
+            Remove events that fall within ``storm_separation_time`` of the
+            dataset boundaries or internal data gaps. Defaults to True.
 
-        Returns:
-            list: List of np.ndarray, each containing the timestamps of one
-                ordinary event (values >= ``self.min_rain`` separated by
-                more than ``self.storm_separation_time`` hours).
+        Returns
+        -------
+        list
+            List of np.ndarray, each containing the timestamps of one ordinary
+            event (values >= ``self.min_rain`` separated by more than
+            ``self.storm_separation_time`` hours).
         """
         if not self.__incomplete_years_removed__:
             raise ValueError(
@@ -399,21 +418,24 @@ class SMEV:
     def remove_short(
         self,
         list_ordinary: list,
-    ) -> Tuple[np.ndarray, np.ndarray, pd.Series]:
-        """Function that removes ordinary events that are too short.
+    ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
+        """Remove ordinary events that are too short.
 
-        Args:
-            list_ordinary (list): list of ordinary events as returned by
-                `get_ordinary_events()`. Each event may contain pd.Timestamp
-                or np.datetime64 values.
+        Parameters
+        ----------
+        list_ordinary : list
+            List of ordinary events as returned by `get_ordinary_events()`.
+            Each event may contain pd.Timestamp or np.datetime64 values.
 
-        Returns:
-            arr_vals (np.ndarray): Array with indices of events that are
-                not too short.
-            arr_dates (np.ndarray): Array with tuple consisting of start
-                and end dates of events that are not too short.
-            n_ordinary_per_year (pd.Series): Series with the number of
-                ordinary events per year.
+        Returns
+        -------
+        arr_vals : np.ndarray
+            Boolean array (all True) of length equal to the number of kept
+            events, one entry per event that passed the duration filter.
+        arr_dates : np.ndarray
+            Array of (end, start) date tuples for each kept event.
+        n_ordinary_per_year : pd.DataFrame
+            DataFrame with the count of ordinary events per year.
         """
         if not self.__incomplete_years_removed__:
             raise ValueError(
@@ -597,17 +619,20 @@ class SMEV:
         ordinary_events: Union[np.ndarray, pd.Series, list],
         data_portion: list[Tuple[int, float]],
     ) -> list[float]:
-        """Estimates shape and scale parameters of the Weibull distribution.
+        """Estimate shape and scale parameters of the Weibull distribution.
 
-        Args:
-            ordinary_events (np.ndarray | pd.Series | list):
-                Values of ordinary events.
-            data_portion (list): Lower and upper limits of the probabilities
-                of data to be used for the parameters estimation.
+        Parameters
+        ----------
+        ordinary_events : np.ndarray or pd.Series or list
+            Values of ordinary events.
+        data_portion : list
+            Lower and upper limits of the probabilities of data to be used
+            for the parameters estimation.
 
-        Returns:
-            list[float]: Shape and scale parameters of the Weibull
-                distribution.
+        Returns
+        -------
+        list[float]
+            Shape and scale parameters of the Weibull distribution.
         """
         sorted_df = np.sort(ordinary_events)
         ecdf = np.arange(1, 1 + len(sorted_df)) / (1 + len(sorted_df))
@@ -641,22 +666,30 @@ class SMEV:
 
     def smev_return_values(
         self,
-        return_period: int,
+        return_period: Union[int, float, list, np.ndarray],
         shape: float,
         scale: float,
         n: float,
-    ) -> float:
-        """Calculates return values (rainfall intensity) according to
-        parameters of the Weibull distribution.
+    ) -> Union[float, np.ndarray]:
+        """Calculate return values (rainfall intensity) from
+        Weibull parameters.
 
-        Args:
-            return_period (int): Return period of interest.
-            shape (float): Shape parameter value.
-            scale (float): Scale parameter value.
-            n (float): SMEV parameter `n`.
+        Parameters
+        ----------
+        return_period : Union[int, float, list, np.ndarray]
+            Return period(s) of interest. Scalar returns a float,
+            array-like returns np.ndarray.
+        shape : float
+            Shape parameter value.
+        scale : float
+            Scale parameter value.
+        n : float
+            SMEV parameter `n`.
 
-        Returns:
-            float: Rainfall intensity value.
+        Returns
+        -------
+        Union[float, np.ndarray]
+            Rainfall intensity value(s).
         """
         return_period = np.asarray(return_period)
         quantile = 1 - (1 / return_period)
@@ -673,20 +706,25 @@ class SMEV:
         self,
         dict_ordinary: Dict[str, pd.DataFrame],
         n: float,
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> Dict[str, dict]:
         """Run SMEV parameter estimation and return level computation
         for all durations.
 
-        Args:
-            dict_ordinary (Dict[str, pd.DataFrame]): Dictionary of ordinary
-                events per duration, as returned by
-                get_ordinary_events_values.
-            n (float): Mean number of ordinary events per year.
+        Parameters
+        ----------
+        dict_ordinary : Dict[str, pd.DataFrame]
+            Dictionary of ordinary events per duration, as returned by
+            `get_ordinary_events_values`.
+        n : float
+            Mean number of ordinary events per year.
 
-        Returns:
-            Dict[str, pd.DataFrame]: Dictionary with SMEV parameters and
-                return levels per duration. Each entry has keys
-                'SMEV_phat' (list[shape, scale]) and 'RLs' (return levels).
+        Returns
+        -------
+        Dict[str, dict]
+            Keys are duration strings (e.g. ``"10"``). Each value is a dict
+            with keys ``'SMEV_phat'`` (``list[float]`` of length 2:
+            ``[shape, scale]``) and ``'RLs'`` (``float`` or ``np.ndarray``
+            of return levels, one per return period).
         """
         dict_smev_outputs = {}
         for d in range(len(self.durations)):
@@ -757,20 +795,27 @@ class SMEV:
     def get_stats(
         df: pd.DataFrame,
     ) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
-        """Computes statistics of precipitation values.
+        """Compute statistics of precipitation values.
 
         Statistics are total precipitation per year, mean precipitation
         per year, standard deviation of precipitation per year, and count
         of precipitation events per year.
 
-        Args:
-            df (pd.DataFrame): Dataframe with precipitation values.
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Dataframe with precipitation values.
 
-        Returns:
-            pd.Series: Total precipitation per year.
-            pd.Series: Mean precipitation per year.
-            pd.Series: Standard deviation of precipitation per year.
-            pd.Series: Count of precipitation events per year.
+        Returns
+        -------
+        total_prec : pd.Series
+            Total precipitation per year.
+        mean_prec : pd.Series
+            Mean precipitation per year.
+        sd_prec : pd.Series
+            Standard deviation of precipitation per year.
+        count_prec : pd.Series
+            Count of precipitation events per year.
         """
         if not isinstance(df, pd.DataFrame):
             raise TypeError("df is not a pandas dataframe")
@@ -801,16 +846,23 @@ class SMEV:
         niter: int,
         n: float,
     ):
-        """Function that bootstraps uncertainty of SMEV return values.
+        """Bootstrap uncertainty of SMEV return values.
 
-        Args:
-            P (np.ndarray): Array of precipitation data.
-            blocks_id (np.ndarray): Array of block identifiers (e.g., years).
-            niter (int): Number of bootstrap iterations.
-            n (float): SMEV parameter `n`.
+        Parameters
+        ----------
+        P : np.ndarray
+            Array of precipitation data.
+        blocks_id : np.ndarray
+            Array of block identifiers (e.g., years).
+        niter : int
+            Number of bootstrap iterations.
+        n : float
+            SMEV parameter `n`.
 
-        Returns:
-            np.ndarray: Array with bootstrapped return value uncertainty.
+        Returns
+        -------
+        np.ndarray
+            Array with bootstrapped return value uncertainty.
         """
         rp = self.return_period
 
