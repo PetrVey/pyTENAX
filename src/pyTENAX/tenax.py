@@ -1138,33 +1138,17 @@ def wbl_leftcensor_loglik(
     float
         Log-likelihood value.
     """
-    # theta is init guess
-    # x is precipitaon\
-    # t is temperature
-    # thr is threshold value (exact, no percentual)
-    a_w = theta[0]
-    b_w = theta[1]
-    a_C = theta[2]
-    b_C = theta[3]
-
-    # Apply conditions based on the threshold
-    t0 = t[x < thr]
+    a_w, b_w, a_C, b_C = theta
+    mask = x < thr
+    t0, t1, x1 = t[mask], t[~mask], x[~mask]
     shapes0 = a_w + b_w * t0
     scales0 = a_C * np.exp(b_C * t0)
-
-    x1 = x[x >= thr]
-    t1 = t[x >= thr]
     shapes1 = a_w + b_w * t1
     scales1 = a_C * np.exp(b_C * t1)
-
-    # Calculate the log-likelihood components
-    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
-    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
-
-    # Sum the components for the final log-likelihood
-    loglik = loglik1 + loglik2
-
-    return loglik
+    return (
+        np.sum(_wbl_logcdf(shapes0, scales0, thr))
+        + np.sum(_wbl_logpdf(x1, shapes1, scales1))
+    )
 
 
 def wbl_leftcensor_loglik_H0shape(
@@ -1197,34 +1181,15 @@ def wbl_leftcensor_loglik_H0shape(
     float
         Log-likelihood value.
     """
-    # theta is init guess
-    # x is precipitaon\
-    # t is temperature
-    # thr is threshold value (exact, no percentual)
-
-    a_w = theta[0]  # Shape parameter (constant) - lambda_0
-    a_C = theta[2]  # Scale parameter base (a)
-    b_C = theta[3]  # Scale parameter adjustment based on `t` - k_0
-
-    # Handle data below the threshold
-    t0 = t[x < thr]
-    shapes0 = a_w * np.ones_like(t0)  # Constant shape parameter
+    a_w, _, a_C, b_C = theta
+    mask = x < thr
+    t0, t1, x1 = t[mask], t[~mask], x[~mask]
     scales0 = a_C * np.exp(b_C * t0)
-
-    # Handle data above or equal to the threshold
-    x1 = x[x >= thr]
-    t1 = t[x >= thr]
-    shapes1 = a_w * np.ones_like(t1)  # Constant shape parameter
     scales1 = a_C * np.exp(b_C * t1)
-
-    # Calculate the log-likelihood components
-    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
-    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
-
-    # Sum the components for the final log-likelihood
-    loglik = loglik1 + loglik2
-
-    return loglik
+    return (
+        np.sum(_wbl_logcdf(np.full(len(t0), a_w), scales0, thr))
+        + np.sum(_wbl_logpdf(x1, np.full(len(t1), a_w), scales1))
+    )
 
 
 def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
@@ -1252,33 +1217,18 @@ def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
     float
         Log-likelihood value.
     """
-    # theta is init guess
-    # x is precipitaon\
-    # t is temperature
-    # thr is threshold value (exact, no percentual)
-    a_w = theta[0]
+    a_w, _, a_C, b_C = theta
     b_w = b_set
-    a_C = theta[2]
-    b_C = theta[3]
-
-    # Apply conditions based on the threshold
-    t0 = t[x < thr]
+    mask = x < thr
+    t0, t1, x1 = t[mask], t[~mask], x[~mask]
     shapes0 = a_w + b_w * t0
     scales0 = a_C * np.exp(b_C * t0)
-
-    x1 = x[x >= thr]
-    t1 = t[x >= thr]
     shapes1 = a_w + b_w * t1
     scales1 = a_C * np.exp(b_C * t1)
-
-    # Calculate the log-likelihood components
-    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
-    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
-
-    # Sum the components for the final log-likelihood
-    loglik = loglik1 + loglik2
-
-    return loglik
+    return (
+        np.sum(_wbl_logcdf(shapes0, scales0, thr))
+        + np.sum(_wbl_logpdf(x1, shapes1, scales1))
+    )
 
 
 def wbl_leftcensor_loglik_exp(
@@ -1309,29 +1259,17 @@ def wbl_leftcensor_loglik_exp(
     float
         Log-likelihood value.
     """
-    a_w = theta[0]
-    b_w = theta[1]
-    a_C = theta[2]
-    b_C = theta[3]
-
-    # Apply conditions based on the threshold
-    t0 = t[x < thr]
+    a_w, b_w, a_C, b_C = theta
+    mask = x < thr
+    t0, t1, x1 = t[mask], t[~mask], x[~mask]
     shapes0 = a_w * np.exp(b_w * t0)
     scales0 = a_C * np.exp(b_C * t0)
-
-    x1 = x[x >= thr]
-    t1 = t[x >= thr]
     shapes1 = a_w * np.exp(b_w * t1)
     scales1 = a_C * np.exp(b_C * t1)
-
-    # Calculate the log-likelihood components
-    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
-    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
-
-    # Sum the components for the final log-likelihood
-    loglik = loglik1 + loglik2
-
-    return loglik
+    return (
+        np.sum(_wbl_logcdf(shapes0, scales0, thr))
+        + np.sum(_wbl_logpdf(x1, shapes1, scales1))
+    )
 
 
 def wbl_leftcensor_loglik_bset_bexp(
@@ -1367,29 +1305,33 @@ def wbl_leftcensor_loglik_bset_bexp(
     float
         Log-likelihood value.
     """
-    a_w = theta[0]
+    a_w, _, a_C, b_C = theta
     b_w = b_set
-    a_C = theta[2]
-    b_C = theta[3]
-
-    # Apply conditions based on the threshold
-    t0 = t[x < thr]
+    mask = x < thr
+    t0, t1, x1 = t[mask], t[~mask], x[~mask]
     shapes0 = a_w * np.exp(b_w * t0)
     scales0 = a_C * np.exp(b_C * t0)
-
-    x1 = x[x >= thr]
-    t1 = t[x >= thr]
     shapes1 = a_w * np.exp(b_w * t1)
     scales1 = a_C * np.exp(b_C * t1)
+    return (
+        np.sum(_wbl_logcdf(shapes0, scales0, thr))
+        + np.sum(_wbl_logpdf(x1, shapes1, scales1))
+    )
 
-    # Calculate the log-likelihood components
-    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
-    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
 
-    # Sum the components for the final log-likelihood
-    loglik = loglik1 + loglik2
+def _wbl_logcdf(shapes, scales, thr):
+    """log(CDF) of Weibull at thr: log(1 - exp(-(thr/scale)^shape))."""
+    z = (thr / scales) ** shapes
+    return np.log(-np.expm1(-z))
 
-    return loglik
+
+def _wbl_logpdf(x, shapes, scales):
+    """log(PDF) of Weibull: log(c/scale) + (c-1)*log(x/scale) - (x/scale)^c."""
+    z = x / scales
+    return (
+        np.log(shapes) - np.log(scales)
+        + (shapes - 1) * np.log(z) - z ** shapes
+    )
 
 
 def gen_norm_pdf(
