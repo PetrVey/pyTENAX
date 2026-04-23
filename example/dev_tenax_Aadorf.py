@@ -63,34 +63,54 @@ dict_ordinary, _, n_ordinary_per_year = S.associate_vars(
 )
 timings["associate_vars"] = time.perf_counter() - t0
 
-# magnitude_model vs magnitude_model_fast over all durations
-print("\n--- magnitude_model per duration ---")
-print(f"  {'dur':>5}  {'t':>8}  phat")
+# magnitude_model optimizer comparison
+methods = ['Nelder-Mead', 'L-BFGS-B']
+ref_phat = None
 
-timings["magnitude_model"] = 0.0
+for mm in methods:
+    print(f"\n--- magnitude_model  method={mm} ---")
+    print(f"  {'dur':>5}  {'t':>8}  {'max_dphat':>10}  phat")
+    t_total = 0.0
+    for dur in S.durations:
+        key = str(dur)
+        P_d = dict_ordinary[key]["ordinary"].to_numpy()
+        T_d = dict_ordinary[key]["T"].to_numpy()
+        thr_d = dict_ordinary[key]["ordinary"].quantile(
+            S.left_censoring[1]
+        )
+        try:
+            t0 = time.perf_counter()
+            F_phat_d, loglik_d, _, _ = S.magnitude_model(
+                P_d, T_d, thr_d, minimize_method=mm
+            )
+            t_dur = time.perf_counter() - t0
+        except Exception as e:
+            print(f"  {dur:>5}  FAILED: {e}")
+            continue
+        t_total += t_dur
 
-for dur in S.durations:
-    key = str(dur)
-    P_d = dict_ordinary[key]["ordinary"].to_numpy()
-    T_d = dict_ordinary[key]["T"].to_numpy()
-    thr_d = dict_ordinary[key]["ordinary"].quantile(S.left_censoring[1])
+        if ref_phat is None:
+            ref_phat = F_phat_d.copy()
+            diff = 0.0
+        else:
+            diff = np.max(np.abs(F_phat_d - ref_phat))
 
-    t0 = time.perf_counter()
-    F_phat_d, loglik_d, _, _ = S.magnitude_model(P_d, T_d, thr_d)
-    t_dur = time.perf_counter() - t0
-    timings["magnitude_model"] += t_dur
+        print(f"  {dur:>5}  {t_dur:>8.3f}  {diff:>10.2e}"
+              f"  {np.round(F_phat_d, 6)}")
 
-    print(f"  {dur:>5}  {t_dur:>8.3f}  phat: {np.round(F_phat_d, 6)}")
+        if mm == 'Nelder-Mead' and dur == 10:
+            P, T = P_d, T_d
+            thr = thr_d
+            F_phat, loglik = F_phat_d, loglik_d
+            timings["magnitude_model"] = t_dur
+            ref_phat = F_phat_d.copy()
 
-# use duration 10 for the rest of the script
-P = dict_ordinary["10"]["ordinary"].to_numpy()
-T = dict_ordinary["10"]["T"].to_numpy()
+    print(f"  {'TOTAL':>5}  {t_total:>8.3f}")
+
 blocks_id = dict_ordinary["10"]["year"].to_numpy()
-thr = dict_ordinary["10"]["ordinary"].quantile(S.left_censoring[1])
 Ts = np.arange(
     np.min(T) - S.temp_delta, np.max(T) + S.temp_delta, S.temp_res_monte_carlo
 )
-F_phat, loglik, _, _ = S.magnitude_model(P, T, thr)
 
 t0 = time.perf_counter()
 g_phat = S.temperature_model(T)

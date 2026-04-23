@@ -617,7 +617,8 @@ class TENAX:
         data_oe_temp,
         thr,
         b_set=None,
-        b_exp=False
+        b_exp=False,
+        minimize_method='Nelder-Mead'
     ):
         """
         Fits the data to the magnitude model of TENAX.
@@ -634,6 +635,9 @@ class TENAX:
             Set value of b. fits magnitude model with a specified value for b.
         b_exp : bool
             If True, uses the exponential rather than linear fit for b.
+        minimize_method : str, optional
+            Optimisation method passed to ``scipy.optimize.minimize``.
+            Defaults to ``'Nelder-Mead'``.
 
 
         Returns
@@ -655,22 +659,33 @@ class TENAX:
 
         P = data_oe_prec
         T = data_oe_temp
-        thr = thr
         init_g = self.init_param_guess
         alpha = self.alpha
+
+        # Precompute split once — mask never changes during optimisation
+        mask = P < thr
+        T0, P1, T1 = T[mask], P[~mask], T[~mask]
+
+        if minimize_method == 'L-BFGS-B':
+            h0_options = {'gtol': 1e-8, 'ftol': 1e-8, 'maxiter': 1000}
+            bounds = [(1e-6, None), (-0.3, 0.3), (1e-6, None), (-0.3, 0.3)]
+        else:
+            h0_options = {'xatol': 1e-8, 'fatol': 1e-8, 'maxiter': 1000}
+            bounds = None
 
         if b_set:
             if b_exp:
                 min_phat_bset = minimize(
                     lambda theta: -wbl_leftcensor_loglik_bset_bexp(
-                        theta, P, T, thr, b_set
+                        theta, T0, P1, T1, thr, b_set
                     ),
                     init_g,
-                    method='Nelder-Mead')
+                    method=minimize_method,
+                    bounds=bounds)
                 phat_bset = min_phat_bset.x
                 loglik_bset = wbl_leftcensor_loglik_bset_bexp(
-                    phat_bset, P, T, thr, b_set
-                    )
+                    phat_bset, T0, P1, T1, thr, b_set
+                )
                 phat_bset[1] = b_set
                 phat = phat_bset
                 loglik = loglik_bset
@@ -679,14 +694,15 @@ class TENAX:
             else:
                 min_phat_bset = minimize(
                     lambda theta: -wbl_leftcensor_loglik_bset(
-                        theta, P, T, thr, b_set
+                        theta, T0, P1, T1, thr, b_set
                     ),
                     init_g,
-                    method='Nelder-Mead')
+                    method=minimize_method,
+                    bounds=bounds)
                 phat_bset = min_phat_bset.x
                 loglik_bset = wbl_leftcensor_loglik_bset(
-                    phat_bset, P, T, thr, b_set
-                    )
+                    phat_bset, T0, P1, T1, thr, b_set
+                )
                 phat_bset[1] = b_set
                 phat = phat_bset
                 loglik = loglik_bset
@@ -696,29 +712,31 @@ class TENAX:
         elif b_exp:
             min_phat_H1 = minimize(
                 lambda theta: -wbl_leftcensor_loglik_exp(
-                    theta, P, T, thr
+                    theta, T0, P1, T1, thr
                 ),
                 init_g,
-                method='Nelder-Mead')
+                method=minimize_method)
             phat_H1 = min_phat_H1.x
 
+            init_H0shape = np.array([phat_H1[0], 0, phat_H1[2], phat_H1[3]])
             min_phat_H0shape = minimize(
                 lambda theta: -wbl_leftcensor_loglik_H0shape(
-                    theta, P, T, thr
+                    theta, T0, P1, T1, thr
                 ),
-                init_g,
-                method='Nelder-Mead',
-                options={'xatol': 1e-8, 'fatol': 1e-8, 'maxiter': 1000})
+                init_H0shape,
+                method=minimize_method,
+                bounds=bounds,
+                options=h0_options)
 
             phat_H0shape = min_phat_H0shape.x
             phat_H0shape[1] = 0
 
             loglik_H1 = wbl_leftcensor_loglik_exp(
-                phat_H1, P, T, thr
-                )
+                phat_H1, T0, P1, T1, thr
+            )
             loglik_H0shape = wbl_leftcensor_loglik_H0shape(
-                phat_H0shape, P, T, thr
-                )
+                phat_H0shape, T0, P1, T1, thr
+            )
             lambda_LR_shape = -2*(loglik_H0shape - loglik_H1)
             pval = chi2.sf(lambda_LR_shape, df=1)
 
@@ -738,29 +756,31 @@ class TENAX:
         else:
             min_phat_H1 = minimize(
                 lambda theta: -wbl_leftcensor_loglik(
-                    theta, P, T, thr
+                    theta, T0, P1, T1, thr
                 ),
                 init_g,
-                method='Nelder-Mead')
+                method=minimize_method)
             phat_H1 = min_phat_H1.x
 
+            init_H0shape = np.array([phat_H1[0], 0, phat_H1[2], phat_H1[3]])
             min_phat_H0shape = minimize(
                 lambda theta: -wbl_leftcensor_loglik_H0shape(
-                    theta, P, T, thr
+                    theta, T0, P1, T1, thr
                 ),
-                init_g,
-                method='Nelder-Mead',
-                options={'xatol': 1e-8, 'fatol': 1e-8, 'maxiter': 1000})
+                init_H0shape,
+                method=minimize_method,
+                bounds=bounds,
+                options=h0_options)
 
             phat_H0shape = min_phat_H0shape.x
             phat_H0shape[1] = 0
 
             loglik_H1 = wbl_leftcensor_loglik(
-                phat_H1, P, T, thr
-                )
+                phat_H1, T0, P1, T1, thr
+            )
             loglik_H0shape = wbl_leftcensor_loglik_H0shape(
-                phat_H0shape, P, T, thr
-                )
+                phat_H0shape, T0, P1, T1, thr
+            )
             lambda_LR_shape = -2*(loglik_H0shape - loglik_H1)
             pval = chi2.sf(lambda_LR_shape, df=1)
 
@@ -1113,8 +1133,9 @@ class TENAX:
 
 def wbl_leftcensor_loglik(
     theta,
-    x,
-    t,
+    t0,
+    x1,
+    t1,
     thr
 ):
     """Compute log-likelihood for a left-censored Weibull distribution.
@@ -1126,10 +1147,12 @@ def wbl_leftcensor_loglik(
     ----------
     theta : array-like
         Parameter vector ``[kappa_0, b, lambda_0, a]``.
-    x : np.ndarray
-        Precipitation values.
-    t : np.ndarray
-        Temperature values.
+    t0 : np.ndarray
+        Temperature values for censored events (precipitation below ``thr``).
+    x1 : np.ndarray
+        Precipitation values at or above ``thr``.
+    t1 : np.ndarray
+        Temperature values corresponding to ``x1``.
     thr : float
         Left-censoring threshold.
 
@@ -1139,8 +1162,6 @@ def wbl_leftcensor_loglik(
         Log-likelihood value.
     """
     a_w, b_w, a_C, b_C = theta
-    mask = x < thr
-    t0, t1, x1 = t[mask], t[~mask], x[~mask]
     shapes0 = a_w + b_w * t0
     scales0 = a_C * np.exp(b_C * t0)
     shapes1 = a_w + b_w * t1
@@ -1153,13 +1174,12 @@ def wbl_leftcensor_loglik(
 
 def wbl_leftcensor_loglik_H0shape(
     theta,
-    x,
-    t,
+    t0,
+    x1,
+    t1,
     thr
 ):
-    """
-    Compute log-likelihood for a left-censored Weibull
-    with constant shape (H0).
+    """Compute log-likelihood for a left-censored Weibull with constant shape (H0).
 
     Same as `wbl_leftcensor_loglik` but with ``b=0``, i.e. shape does not
     depend on temperature. Used as the null hypothesis in the likelihood-ratio
@@ -1169,10 +1189,12 @@ def wbl_leftcensor_loglik_H0shape(
     ----------
     theta : array-like
         Parameter vector ``[kappa_0, b, lambda_0, a]`` (``b`` is ignored).
-    x : np.ndarray
-        Precipitation values.
-    t : np.ndarray
-        Temperature values.
+    t0 : np.ndarray
+        Temperature values for censored events (precipitation below ``thr``).
+    x1 : np.ndarray
+        Precipitation values at or above ``thr``.
+    t1 : np.ndarray
+        Temperature values corresponding to ``x1``.
     thr : float
         Left-censoring threshold.
 
@@ -1182,8 +1204,6 @@ def wbl_leftcensor_loglik_H0shape(
         Log-likelihood value.
     """
     a_w, _, a_C, b_C = theta
-    mask = x < thr
-    t0, t1, x1 = t[mask], t[~mask], x[~mask]
     scales0 = a_C * np.exp(b_C * t0)
     scales1 = a_C * np.exp(b_C * t1)
     return (
@@ -1192,7 +1212,7 @@ def wbl_leftcensor_loglik_H0shape(
     )
 
 
-def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
+def wbl_leftcensor_loglik_bset(theta, t0, x1, t1, thr, b_set):
     """Compute log-likelihood for a left-censored Weibull with fixed b.
 
     Same as `wbl_leftcensor_loglik` but ``b`` is fixed to ``b_set`` and not
@@ -1203,10 +1223,12 @@ def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
     theta : array-like
         Parameter vector ``[kappa_0, b, lambda_0, a]`` (``b`` is overridden
         by ``b_set``).
-    x : np.ndarray
-        Precipitation values.
-    t : np.ndarray
-        Temperature values.
+    t0 : np.ndarray
+        Temperature values for censored events (precipitation below ``thr``).
+    x1 : np.ndarray
+        Precipitation values at or above ``thr``.
+    t1 : np.ndarray
+        Temperature values corresponding to ``x1``.
     thr : float
         Left-censoring threshold.
     b_set : float
@@ -1219,8 +1241,6 @@ def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
     """
     a_w, _, a_C, b_C = theta
     b_w = b_set
-    mask = x < thr
-    t0, t1, x1 = t[mask], t[~mask], x[~mask]
     shapes0 = a_w + b_w * t0
     scales0 = a_C * np.exp(b_C * t0)
     shapes1 = a_w + b_w * t1
@@ -1233,12 +1253,12 @@ def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
 
 def wbl_leftcensor_loglik_exp(
     theta,
-    x,
-    t,
+    t0,
+    x1,
+    t1,
     thr
 ):
-    """Compute log-likelihood for a left-censored Weibull
-    with exponential shape.
+    """Compute log-likelihood for a left-censored Weibull with exponential shape.
 
     Like `wbl_leftcensor_loglik` but shape depends exponentially on
     temperature: ``shape = kappa_0 * exp(b * T)``.
@@ -1247,10 +1267,12 @@ def wbl_leftcensor_loglik_exp(
     ----------
     theta : array-like
         Parameter vector ``[kappa_0, b, lambda_0, a]``.
-    x : np.ndarray
-        Precipitation values.
-    t : np.ndarray
-        Temperature values.
+    t0 : np.ndarray
+        Temperature values for censored events (precipitation below ``thr``).
+    x1 : np.ndarray
+        Precipitation values at or above ``thr``.
+    t1 : np.ndarray
+        Temperature values corresponding to ``x1``.
     thr : float
         Left-censoring threshold.
 
@@ -1260,8 +1282,6 @@ def wbl_leftcensor_loglik_exp(
         Log-likelihood value.
     """
     a_w, b_w, a_C, b_C = theta
-    mask = x < thr
-    t0, t1, x1 = t[mask], t[~mask], x[~mask]
     shapes0 = a_w * np.exp(b_w * t0)
     scales0 = a_C * np.exp(b_C * t0)
     shapes1 = a_w * np.exp(b_w * t1)
@@ -1274,13 +1294,13 @@ def wbl_leftcensor_loglik_exp(
 
 def wbl_leftcensor_loglik_bset_bexp(
     theta,
-    x,
-    t,
+    t0,
+    x1,
+    t1,
     thr,
     b_set
 ):
-    """Compute log-likelihood for a left-censored Weibull
-    with exponential shape, fixed b.
+    """Compute log-likelihood for a left-censored Weibull with exponential shape, fixed b.
 
     Combines `wbl_leftcensor_loglik_exp` and `wbl_leftcensor_loglik_bset`:
     shape depends exponentially on temperature and ``b`` is fixed to
@@ -1291,10 +1311,12 @@ def wbl_leftcensor_loglik_bset_bexp(
     theta : array-like
         Parameter vector ``[kappa_0, b, lambda_0, a]`` (``b`` is overridden
         by ``b_set``).
-    x : np.ndarray
-        Precipitation values.
-    t : np.ndarray
-        Temperature values.
+    t0 : np.ndarray
+        Temperature values for censored events (precipitation below ``thr``).
+    x1 : np.ndarray
+        Precipitation values at or above ``thr``.
+    t1 : np.ndarray
+        Temperature values corresponding to ``x1``.
     thr : float
         Left-censoring threshold.
     b_set : float
@@ -1307,8 +1329,6 @@ def wbl_leftcensor_loglik_bset_bexp(
     """
     a_w, _, a_C, b_C = theta
     b_w = b_set
-    mask = x < thr
-    t0, t1, x1 = t[mask], t[~mask], x[~mask]
     shapes0 = a_w * np.exp(b_w * t0)
     scales0 = a_C * np.exp(b_C * t0)
     shapes1 = a_w * np.exp(b_w * t1)
