@@ -638,6 +638,7 @@ class TENAX:
         minimize_method : str, optional
             Optimisation method passed to ``scipy.optimize.minimize``.
             Defaults to ``'Nelder-Mead'``.
+            Tested also ``'L-BFGS-B'``, though it can lead to some instability
 
 
         Returns
@@ -669,8 +670,11 @@ class TENAX:
         if minimize_method == 'L-BFGS-B':
             h0_options = {'gtol': 1e-8, 'ftol': 1e-8, 'maxiter': 1000}
             bounds = [(1e-6, None), (-0.3, 0.3), (1e-6, None), (-0.3, 0.3)]
-        else:
+        elif minimize_method == 'Nelder-Mead':
             h0_options = {'xatol': 1e-8, 'fatol': 1e-8, 'maxiter': 1000}
+            bounds = None
+        else:
+            h0_options = {'maxiter': 1000}
             bounds = None
 
         if b_set:
@@ -986,7 +990,8 @@ class TENAX:
         blocks_id,
         Ts,
         temp_method="norm",
-        method_root_scalar="brentq"
+        method_root_scalar="brentq",
+        minimize_method="Nelder-Mead"
     ):
         """Bootstrap uncertainty estimation for the TENAX model.
 
@@ -1006,6 +1011,9 @@ class TENAX:
         method_root_scalar : str, optional
             Root-finding method for model inversion. Defaults to
             ``"brentq"``.
+        minimize_method : str, optional
+            Optimisation method passed to ``magnitude_model``. Defaults to
+            ``"Nelder-Mead"``.
 
         Returns
         -------
@@ -1084,7 +1092,8 @@ class TENAX:
                 F_phat_temporary, loglik_temp, _, _ = self.magnitude_model(
                     Pr,
                     Tr,
-                    thr
+                    thr,
+                    minimize_method=minimize_method
                 )
                 _t_magnitude += time.perf_counter() - _t0
 
@@ -1163,9 +1172,9 @@ def wbl_leftcensor_loglik(
     """
     a_w, b_w, a_C, b_C = theta
     shapes0 = a_w + b_w * t0
-    scales0 = a_C * np.exp(b_C * t0)
+    scales0 = a_C * np.exp(np.minimum(b_C * t0, 709.0))
     shapes1 = a_w + b_w * t1
-    scales1 = a_C * np.exp(b_C * t1)
+    scales1 = a_C * np.exp(np.minimum(b_C * t1, 709.0))
     return (
         np.sum(_wbl_logcdf(shapes0, scales0, thr))
         + np.sum(_wbl_logpdf(x1, shapes1, scales1))
@@ -1204,8 +1213,8 @@ def wbl_leftcensor_loglik_H0shape(
         Log-likelihood value.
     """
     a_w, _, a_C, b_C = theta
-    scales0 = a_C * np.exp(b_C * t0)
-    scales1 = a_C * np.exp(b_C * t1)
+    scales0 = a_C * np.exp(np.minimum(b_C * t0, 709.0))
+    scales1 = a_C * np.exp(np.minimum(b_C * t1, 709.0))
     return (
         np.sum(_wbl_logcdf(np.full(len(t0), a_w), scales0, thr))
         + np.sum(_wbl_logpdf(x1, np.full(len(t1), a_w), scales1))
@@ -1242,9 +1251,9 @@ def wbl_leftcensor_loglik_bset(theta, t0, x1, t1, thr, b_set):
     a_w, _, a_C, b_C = theta
     b_w = b_set
     shapes0 = a_w + b_w * t0
-    scales0 = a_C * np.exp(b_C * t0)
+    scales0 = a_C * np.exp(np.minimum(b_C * t0, 709.0))
     shapes1 = a_w + b_w * t1
-    scales1 = a_C * np.exp(b_C * t1)
+    scales1 = a_C * np.exp(np.minimum(b_C * t1, 709.0))
     return (
         np.sum(_wbl_logcdf(shapes0, scales0, thr))
         + np.sum(_wbl_logpdf(x1, shapes1, scales1))
@@ -1282,10 +1291,10 @@ def wbl_leftcensor_loglik_exp(
         Log-likelihood value.
     """
     a_w, b_w, a_C, b_C = theta
-    shapes0 = a_w * np.exp(b_w * t0)
-    scales0 = a_C * np.exp(b_C * t0)
-    shapes1 = a_w * np.exp(b_w * t1)
-    scales1 = a_C * np.exp(b_C * t1)
+    shapes0 = a_w * np.exp(np.minimum(b_w * t0, 709.0))
+    scales0 = a_C * np.exp(np.minimum(b_C * t0, 709.0))
+    shapes1 = a_w * np.exp(np.minimum(b_w * t1, 709.0))
+    scales1 = a_C * np.exp(np.minimum(b_C * t1, 709.0))
     return (
         np.sum(_wbl_logcdf(shapes0, scales0, thr))
         + np.sum(_wbl_logpdf(x1, shapes1, scales1))
@@ -1329,10 +1338,10 @@ def wbl_leftcensor_loglik_bset_bexp(
     """
     a_w, _, a_C, b_C = theta
     b_w = b_set
-    shapes0 = a_w * np.exp(b_w * t0)
-    scales0 = a_C * np.exp(b_C * t0)
-    shapes1 = a_w * np.exp(b_w * t1)
-    scales1 = a_C * np.exp(b_C * t1)
+    shapes0 = a_w * np.exp(np.minimum(b_w * t0, 709.0))
+    scales0 = a_C * np.exp(np.minimum(b_C * t0, 709.0))
+    shapes1 = a_w * np.exp(np.minimum(b_w * t1, 709.0))
+    scales1 = a_C * np.exp(np.minimum(b_C * t1, 709.0))
     return (
         np.sum(_wbl_logcdf(shapes0, scales0, thr))
         + np.sum(_wbl_logpdf(x1, shapes1, scales1))
@@ -1341,16 +1350,22 @@ def wbl_leftcensor_loglik_bset_bexp(
 
 def _wbl_logcdf(shapes, scales, thr):
     """log(CDF) of Weibull at thr: log(1 - exp(-(thr/scale)^shape))."""
-    z = (thr / scales) ** shapes
+    shapes = np.maximum(shapes, 1e-300)
+    scales = np.maximum(scales, 1e-300)
+    log_z = shapes * np.log(np.maximum(thr / scales, 1e-300))
+    z = np.exp(np.minimum(log_z, 709.0))
+    z = np.maximum(z, 1e-300)
     return np.log(-np.expm1(-z))
 
 
 def _wbl_logpdf(x, shapes, scales):
     """log(PDF) of Weibull: log(c/scale) + (c-1)*log(x/scale) - (x/scale)^c."""
-    z = x / scales
+    shapes = np.maximum(shapes, 1e-300)
+    scales = np.maximum(scales, 1e-300)
+    z = np.maximum(x / scales, 1e-300)
     return (
         np.log(shapes) - np.log(scales)
-        + (shapes - 1) * np.log(z) - z ** shapes
+        + (shapes - 1) * np.log(z) - np.exp(np.minimum(shapes * np.log(z), 709.0))
     )
 
 

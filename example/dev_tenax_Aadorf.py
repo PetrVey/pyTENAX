@@ -64,7 +64,7 @@ dict_ordinary, _, n_ordinary_per_year = S.associate_vars(
 timings["associate_vars"] = time.perf_counter() - t0
 
 # magnitude_model optimizer comparison
-methods = ['Nelder-Mead', 'L-BFGS-B']
+methods = ['Nelder-Mead', "L-BFGS-B"]
 ref_phat = None
 
 for mm in methods:
@@ -125,7 +125,7 @@ timings["model_inversion"] = time.perf_counter() - t0
 S.n_monte_carlo = 20000
 t0 = time.perf_counter()
 F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(
-    P, T, blocks_id, Ts
+    P, T, blocks_id, Ts, "norm", "brentq", "L-BFGS-B"
 )
 timings["tenax_bootstrap_uncertainty"] = time.perf_counter() - t0
 
