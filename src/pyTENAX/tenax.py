@@ -1026,6 +1026,11 @@ class TENAX:
         n_unc = np.full(niter, np.nan)
         n_err = 0
 
+        _t_resample = 0.0
+        _t_magnitude = 0.0
+        _t_temperature = 0.0
+        _t_inversion = 0.0
+
         # Random sampling iterations
         for ii in range(niter):
             Pr = []
@@ -1034,6 +1039,7 @@ class TENAX:
 
             # Create bootstrapped data sample and
             # corresponding 'fake' blocks id
+            _t0 = time.perf_counter()
             for iy in range(M):
                 selected = blocks_id == blocks[randy[iy, ii]]
                 Pr.append(P[selected])
@@ -1046,6 +1052,7 @@ class TENAX:
             Pr = np.concatenate(Pr)
             Tr = np.concatenate(Tr)
             Bid = np.concatenate(Bid)
+            _t_resample += time.perf_counter() - _t0
 
             try:
                 # Left-censoring threshold
@@ -1053,21 +1060,27 @@ class TENAX:
 
                 # TENAX model components
                 # Magnitude model
+                _t0 = time.perf_counter()
                 F_phat_temporary, loglik_temp, _, _ = self.magnitude_model(
                     Pr,
                     Tr,
                     thr
                 )
+                _t_magnitude += time.perf_counter() - _t0
 
                 # Temperature model
+                _t0 = time.perf_counter()
                 g_phat_temporary = self.temperature_model(
                     Tr,
                     method=temp_method
                 )
+                _t_temperature += time.perf_counter() - _t0
+
                 # Mean number of events per block
                 n_temporary = len(Pr) / M
+
                 # Estimate return levels using Monte Carlo samples
-                # TODO: check this cause it is slow...
+                _t0 = time.perf_counter()
                 RL_temporary, _, _ = self.model_inversion(
                     F_phat_temporary,
                     g_phat_temporary,
@@ -1076,6 +1089,7 @@ class TENAX:
                     temp_method=temp_method,
                     method_root_scalar=method_root_scalar,
                 )
+                _t_inversion += time.perf_counter() - _t0
 
                 # Store results
                 F_phat_unc[ii, :] = F_phat_temporary
@@ -1084,6 +1098,15 @@ class TENAX:
                 n_unc[ii] = n_temporary
             except Exception:
                 n_err += 1
+
+        print("\n--- bootstrap_uncertainty internal timings ---")
+        for label, elapsed in [
+            ("resample", _t_resample),
+            ("magnitude_model", _t_magnitude),
+            ("temperature_model", _t_temperature),
+            ("model_inversion", _t_inversion),
+        ]:
+            print(f"  {label:<20} {elapsed:7.3f} s")
 
         return F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err
 
