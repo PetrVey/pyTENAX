@@ -5,10 +5,17 @@ import time
 import matplotlib.pyplot as plt
 from pyTENAX import smev, tenax, plotting
 
+rp = np.sort(
+    np.concatenate([
+        np.exp(np.arange(np.log(1.1), np.log(200), 0.05)),
+        [2.33, 5, 10, 20, 30, 50, 100]
+    ])
+).tolist()
+
 # Initiate TENAX class with customized setup
 S = tenax.TENAX(
-    return_period=[2, 5, 10, 20, 50, 100, 200],
-    durations=[10, 60, 180, 360, 720, 1440],
+    return_period= rp,
+    durations=[10, ], #60, 180, 360, 720, 1440],
     time_resolution=10,
     left_censoring=[0, 0.90],
     alpha=0.05,
@@ -127,7 +134,7 @@ timings["model_inversion"] = time.perf_counter() - t0
 S.n_monte_carlo = 20000
 t0 = time.perf_counter()
 F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(
-    P, T, blocks_id, Ts, "norm", "brentq", #"L-BFGS-B"
+    P, T, blocks_id, Ts, "norm", "brentq", "Nelder-Mead", False
 )
 timings["tenax_bootstrap_uncertainty"] = time.perf_counter() - t0
 

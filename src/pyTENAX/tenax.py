@@ -6,7 +6,7 @@ from scipy.optimize import root_scalar, minimize
 import time
 from scipy.optimize import curve_fit
 from typing import Union, Tuple, Dict
-from multiprocessing.dummy import Pool as ThreadPool
+from joblib import Parallel, delayed
 from pyTENAX.smev import (
     _smev_inner_loop_numba_seq,
     _smev_inner_loop_numba,
@@ -1010,7 +1010,9 @@ class TENAX:
         Ts,
         temp_method="norm",
         method_root_scalar="brentq",
-        minimize_method="Nelder-Mead"
+        minimize_method="Nelder-Mead",
+        parallel=False,
+        n_jobs=-1,
     ):
         """Bootstrap uncertainty estimation for the TENAX model.
 
@@ -1033,6 +1035,24 @@ class TENAX:
         minimize_method : str, optional
             Optimisation method passed to ``magnitude_model``. Defaults to
             ``"Nelder-Mead"``.
+        parallel : bool, optional
+            Run bootstrap iterations in parallel using
+            ``ProcessPoolExecutor``. Warm start is disabled when
+            ``parallel=True`` because iterations run in separate processes
+            and cannot share state. Defaults to ``False``.
+        n_jobs : int, optional
+            Number of worker processes. ``-1`` uses all available cores.
+            Ignored when ``parallel=False``. Defaults to ``-1``.
+
+        Notes
+        -----
+        **Warm start (sequential mode only):** each iteration reuses the
+        fitted parameters from the previous iteration as the initial guess
+        for ``magnitude_model``. Since consecutive bootstrap samples are
+        drawn from the same dataset, their optimal parameters are typically
+        close to each other, so the optimiser converges in fewer steps.
+        ``self.init_param_guess`` is restored to its original value after
+        the loop so that subsequent calls are not affected.
 
         Returns
         -------
@@ -1073,90 +1093,134 @@ class TENAX:
         n_unc = np.full(niter, np.nan)
         n_err = 0
 
-        _t_resample = 0.0
-        _t_magnitude = 0.0
-        _t_temperature = 0.0
-        _t_inversion = 0.0
+        if parallel:
+            args_list = [
+                (P, T, blocks_id, blocks, randy[:, ii], M, perc_thres, Ts,
+                 temp_method, method_root_scalar, minimize_method, self)
+                for ii in range(niter)
+            ]
+            results = Parallel(n_jobs=n_jobs)(
+                delayed(_bootstrap_single_iteration)(args)
+                for args in args_list
+            )
 
-        # Random sampling iterations
-        for ii in range(niter):
-            Pr = []
-            Tr = []
-            Bid = []
+            for ii, (F_tmp, g_tmp, RL_tmp, n_tmp, err) in enumerate(results):
+                if err == 0:
+                    F_phat_unc[ii, :] = F_tmp
+                    g_phat_unc[ii, :] = g_tmp
+                    RL_unc[ii, :] = RL_tmp
+                    n_unc[ii] = n_tmp
+                n_err += err
 
-            # Create bootstrapped data sample and
-            # corresponding 'fake' blocks id
-            _t0 = time.perf_counter()
-            for iy in range(M):
-                selected = blocks_id == blocks[randy[iy, ii]]
-                Pr.append(P[selected])
-                Tr.append(T[selected])
-                Bid.append(
-                    np.full(np.sum(selected), iy + 1)
-                )  # MATLAB indexing starts at 1
+        else:
+            # updated after each successful magnitude_model fit
+            _warm_start = None
 
-            # Concatenate the resampled data
-            Pr = np.concatenate(Pr)
-            Tr = np.concatenate(Tr)
-            Bid = np.concatenate(Bid)
-            _t_resample += time.perf_counter() - _t0
+            # restore after loop
+            _init_param_guess_orig = self.init_param_guess
 
-            try:
-                # Left-censoring threshold
-                thr = np.quantile(Pr, perc_thres)
+            _t_resample = 0.0
+            _t_magnitude = 0.0
+            _t_temperature = 0.0
+            _t_inversion = 0.0
 
-                # TENAX model components
-                # Magnitude model
+            for ii in range(niter):
+                Pr, Tr, Bid = [], [], []
+
                 _t0 = time.perf_counter()
-                F_phat_temporary, loglik_temp, _, _ = self.magnitude_model(
-                    Pr,
-                    Tr,
-                    thr,
-                    minimize_method=minimize_method
-                )
-                _t_magnitude += time.perf_counter() - _t0
+                for iy in range(M):
+                    selected = blocks_id == blocks[randy[iy, ii]]
+                    Pr.append(P[selected])
+                    Tr.append(T[selected])
+                    Bid.append(np.full(np.sum(selected), iy + 1))
 
-                # Temperature model
-                _t0 = time.perf_counter()
-                g_phat_temporary = self.temperature_model(
-                    Tr,
-                    method=temp_method
-                )
-                _t_temperature += time.perf_counter() - _t0
+                Pr = np.concatenate(Pr)
+                Tr = np.concatenate(Tr)
+                _t_resample += time.perf_counter() - _t0
 
-                # Mean number of events per block
-                n_temporary = len(Pr) / M
+                try:
+                    thr = np.quantile(Pr, perc_thres)
 
-                # Estimate return levels using Monte Carlo samples
-                _t0 = time.perf_counter()
-                RL_temporary, _, _ = self.model_inversion(
-                    F_phat_temporary,
-                    g_phat_temporary,
-                    n_temporary,
-                    Ts,
-                    temp_method=temp_method,
-                    method_root_scalar=method_root_scalar,
-                )
-                _t_inversion += time.perf_counter() - _t0
+                    _t0 = time.perf_counter()
+                    if _warm_start is not None:
+                        self.init_param_guess = _warm_start
+                    F_phat_temporary, _, _, _ = self.magnitude_model(
+                        Pr, Tr, thr, minimize_method=minimize_method
+                    )
+                    _t_magnitude += time.perf_counter() - _t0
+                    _warm_start = F_phat_temporary
 
-                # Store results
-                F_phat_unc[ii, :] = F_phat_temporary
-                g_phat_unc[ii, :] = g_phat_temporary
-                RL_unc[ii, :] = RL_temporary
-                n_unc[ii] = n_temporary
-            except Exception:
-                n_err += 1
+                    _t0 = time.perf_counter()
+                    g_phat_temporary = self.temperature_model(
+                        Tr,
+                        method=temp_method
+                        )
+                    _t_temperature += time.perf_counter() - _t0
 
-        print("\n--- bootstrap_uncertainty internal timings ---")
-        for label, elapsed in [
-            ("resample", _t_resample),
-            ("magnitude_model", _t_magnitude),
-            ("temperature_model", _t_temperature),
-            ("model_inversion", _t_inversion),
-        ]:
-            print(f"  {label:<20} {elapsed:7.3f} s")
+                    n_temporary = len(Pr) / M
+
+                    _t0 = time.perf_counter()
+                    RL_temporary, _, _ = self.model_inversion(
+                        F_phat_temporary, g_phat_temporary, n_temporary, Ts,
+                        temp_method=temp_method,
+                        method_root_scalar=method_root_scalar,
+                    )
+                    _t_inversion += time.perf_counter() - _t0
+
+                    F_phat_unc[ii, :] = F_phat_temporary
+                    g_phat_unc[ii, :] = g_phat_temporary
+                    RL_unc[ii, :] = RL_temporary
+                    n_unc[ii] = n_temporary
+                except Exception:
+                    n_err += 1
+
+            print("\n--- bootstrap_uncertainty internal timings ---")
+            for label, elapsed in [
+                ("resample", _t_resample),
+                ("magnitude_model", _t_magnitude),
+                ("temperature_model", _t_temperature),
+                ("model_inversion", _t_inversion),
+            ]:
+                print(f"  {label:<20} {elapsed:7.3f} s")
+
+            self.init_param_guess = _init_param_guess_orig
 
         return F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err
+
+
+def _bootstrap_single_iteration(args):
+    """One bootstrap iteration, designed for ProcessPoolExecutor."""
+    (P, T, blocks_id, blocks, randy_ii, M, perc_thres, Ts,
+     temp_method, method_root_scalar, minimize_method, S) = args
+
+    Pr, Tr = [], []
+    for iy in range(M):
+        selected = blocks_id == blocks[randy_ii[iy]]
+        Pr.append(P[selected])
+        Tr.append(T[selected])
+    Pr = np.concatenate(Pr)
+    Tr = np.concatenate(Tr)
+
+    try:
+        thr = np.quantile(Pr, perc_thres)
+        F_phat_tmp, _, _, _ = S.magnitude_model(
+            Pr,
+            Tr,
+            thr,
+            minimize_method=minimize_method
+        )
+        g_phat_tmp = S.temperature_model(Tr, method=temp_method)
+        n_tmp = len(Pr) / M
+        RL_tmp, _, _ = S.model_inversion(
+            F_phat_tmp, g_phat_tmp, n_tmp, Ts,
+            temp_method=temp_method,
+            method_root_scalar=method_root_scalar,
+        )
+        return F_phat_tmp, np.array(g_phat_tmp), RL_tmp, n_tmp, 0
+    except Exception:
+        nan_g = np.full(2 if temp_method == "norm" else 3, np.nan)
+        nan_rl = np.full(len(S.return_period), np.nan)
+        return np.full(4, np.nan), nan_g, nan_rl, np.nan, 1
 
 
 def wbl_leftcensor_loglik(
