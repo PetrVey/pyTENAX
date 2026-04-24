@@ -12,6 +12,7 @@ S = tenax.TENAX(
     time_resolution=10,
     left_censoring=[0, 0.90],
     alpha=0.05,
+    niter_tenax=100
 )
 
 timings = {}
@@ -59,7 +60,8 @@ timings["load_temperature"] = time.perf_counter() - t0
 
 t0 = time.perf_counter()
 dict_ordinary, _, n_ordinary_per_year = S.associate_vars(
-    dict_ordinary, df_arr_t_data, df_dates_t_data
+    dict_ordinary, df_arr_t_data, df_dates_t_data,
+    method="vectorized"
 )
 timings["associate_vars"] = time.perf_counter() - t0
 
@@ -125,7 +127,7 @@ timings["model_inversion"] = time.perf_counter() - t0
 S.n_monte_carlo = 20000
 t0 = time.perf_counter()
 F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err = S.TNX_tenax_bootstrap_uncertainty(
-    P, T, blocks_id, Ts, "norm", "brentq", "L-BFGS-B"
+    P, T, blocks_id, Ts, "norm", "brentq", #"L-BFGS-B"
 )
 timings["tenax_bootstrap_uncertainty"] = time.perf_counter() - t0
 

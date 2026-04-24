@@ -499,7 +499,8 @@ class TENAX:
         self,
         dict_ordinary,
         data_temperature,
-        dates_temperature
+        dates_temperature,
+        method="vectorized",
     ):
         """Associate temperature with each ordinary event.
 
@@ -516,6 +517,13 @@ class TENAX:
             Full temperature time series.
         dates_temperature : np.ndarray
             Timestamps of the full temperature dataset.
+        method : str, optional
+            Backend used for the temperature association. Defaults to
+            ``"iterrows"``. One of:
+
+            - ``"iterrows"``   — pandas iterrows loop (original behaviour).
+            - ``"vectorized"`` — fully vectorised numpy using cumulative-sum
+              trick; O(1) per event after one O(n) precomputation pass.
 
         Returns
         -------
@@ -530,78 +538,89 @@ class TENAX:
             DataFrame with the count of ordinary events per year after
             dropping events without temperature.
         """
-        # start here
         dict_dropped_oe = {}
         time_index = dates_temperature.reshape(-1)
-
         delta_time = np.timedelta64(int(self.temp_time_hour), "h")
+
+        if method == "vectorized":
+            # Precompute cumulative sum and valid-count once over full series
+            nan_mask = np.isnan(data_temperature)
+            data_filled = data_temperature.copy()
+            data_filled[nan_mask] = 0.0
+            cumsum = np.cumsum(data_filled)
+            count_valid = np.cumsum(~nan_mask)
+
         for d in self.durations:
             df_oe = dict_ordinary[f"{d}"]
-            arr_dates_oe = np.array(df_oe["oe_time"])
-            ll_vals = []
+            arr_dates_oe = np.array(df_oe["oe_time"], dtype=time_index.dtype)
 
-            # Prepare indices for using pandas `merge_asof` function
-            df_time_index = pd.DataFrame({"time_index": time_index})
-            df_arr_dates_oe = pd.DataFrame({"oe_time": arr_dates_oe})
+            if method == "vectorized":
+                # Vectorized nearest-neighbour search for all events at once
+                idx = np.searchsorted(time_index, arr_dates_oe, side="right")
+                idx = np.clip(idx, 1, len(time_index) - 1)
+                dist_left = (
+                    arr_dates_oe - time_index[idx - 1]
+                             ).astype(np.int64)
+                dist_right = (
+                    time_index[idx] - arr_dates_oe
+                    ).astype(np.int64)
+                closest_idxs = np.where(dist_left <= dist_right, idx - 1, idx)
 
-            # Use pandas to perform an "as-of" merge that efficiently finds
-            # the closest index, 30 are handled to nearest lower
-            merged = pd.merge_asof(
-                df_arr_dates_oe,
-                df_time_index,
-                left_on="oe_time",
-                right_on="time_index",
-                direction="nearest",
-            )
+                # Vectorized window start indices
+                start_times = time_index[closest_idxs] + delta_time
+                start_idxs = np.searchsorted(time_index, start_times,
+                                             side="left")
 
-            for _, row in merged.iterrows():
-                end_time = row["time_index"]
+                # Cumsum trick: O(1) per event mean using precomputed arrays
+                prev_cumsum = np.where(
+                    start_idxs > 0, cumsum[np.maximum(start_idxs - 1, 0)], 0.0
+                )
+                prev_count = np.where(
+                    start_idxs > 0, 
+                    count_valid[np.maximum(start_idxs - 1, 0)],
+                    0
+                )
+                sums = cumsum[closest_idxs] - prev_cumsum
+                counts = count_valid[closest_idxs] - prev_count
+                ll_vals = np.where(counts > 0, np.round(sums / counts, 3),
+                                   np.nan)
 
-                # Find the index of the closest time
-                # directly using `np.searchsorted`
-                if end_time is None:
-                    continue  # Skip this iteration if no match was found
+            else:  # iterrows
+                ll_vals = []
+                df_time_index = pd.DataFrame({"time_index": time_index})
+                df_arr_dates_oe = pd.DataFrame({"oe_time": arr_dates_oe})
+                merged = pd.merge_asof(
+                    df_arr_dates_oe,
+                    df_time_index,
+                    left_on="oe_time",
+                    right_on="time_index",
+                    direction="nearest",
+                )
+                for _, row in merged.iterrows():
+                    end_time = row["time_index"]
+                    if end_time is None:
+                        continue
+                    end_dt = np.datetime64(end_time)
+                    closest_idx = np.searchsorted(time_index, end_dt)
+                    end_time_minus_delta = time_index[closest_idx] + delta_time
+                    start_time_idx = np.searchsorted(time_index,
+                                                     end_time_minus_delta)
+                    slc = data_temperature[start_time_idx:closest_idx + 1]
+                    if np.all(np.isnan(slc)):
+                        ll_vals.append(np.nan)
+                    else:
+                        ll_vals.append(np.nanmean(slc).round(decimals=3))
 
-                # Use `np.searchsorted` to find the index in `time_index`
-                end_dt = np.datetime64(end_time)
-                closest_idx = np.searchsorted(time_index, end_dt)
-
-                # Calculate end time with delta
-                end_time_minus_delta = time_index[closest_idx] + delta_time
-
-                # Find start index efficiently
-                start_time_idx = np.searchsorted(time_index,
-                                                 end_time_minus_delta
-                                                 )
-
-                # Slice array more efficiently
-                ll_idx_in_slice_vals = data_temperature[
-                    start_time_idx: closest_idx + 1
-                ]
-
-                # Compute mean using vectorized method
-                if np.all(np.isnan(ll_idx_in_slice_vals)):
-                    ll_val = np.nan
-                else:
-                    ll_val = np.nanmean(ll_idx_in_slice_vals).round(decimals=3)
-                ll_vals.append(ll_val)
-
-            # Assign computed list back to DataFrame
             dict_ordinary[f"{d}"]["T"] = ll_vals
-
-            # Locate rows with NaN and saved them
             dict_dropped_oe[f"{d}"] = dict_ordinary[f"{d}"][
                 dict_ordinary[f"{d}"]["T"].isna()
             ]
-
-            # Drop rows with NaN in the "T" column from the original DataFrame
             dict_ordinary[f"{d}"] = (
                 dict_ordinary[f"{d}"]
                 .dropna(subset=["T"])
                 .reset_index(drop=True)
             )
 
-        # Recalculate number of OE
         n_ordinary_per_year_new = (
             dict_ordinary[f"{d}"]
             .groupby(["year"])["ordinary"]
@@ -1188,7 +1207,8 @@ def wbl_leftcensor_loglik_H0shape(
     t1,
     thr
 ):
-    """Compute log-likelihood for a left-censored Weibull with constant shape (H0).
+    """Compute log-likelihood for a left-censored Weibull
+    with constant shape (H0).
 
     Same as `wbl_leftcensor_loglik` but with ``b=0``, i.e. shape does not
     depend on temperature. Used as the null hypothesis in the likelihood-ratio
@@ -1216,8 +1236,8 @@ def wbl_leftcensor_loglik_H0shape(
     scales0 = a_C * np.exp(np.minimum(b_C * t0, 709.0))
     scales1 = a_C * np.exp(np.minimum(b_C * t1, 709.0))
     return (
-        np.sum(_wbl_logcdf(np.full(len(t0), a_w), scales0, thr))
-        + np.sum(_wbl_logpdf(x1, np.full(len(t1), a_w), scales1))
+        np.sum(_wbl_logcdf(a_w, scales0, thr))
+        + np.sum(_wbl_logpdf(x1, a_w, scales1))
     )
 
 
@@ -1267,7 +1287,8 @@ def wbl_leftcensor_loglik_exp(
     t1,
     thr
 ):
-    """Compute log-likelihood for a left-censored Weibull with exponential shape.
+    """Compute log-likelihood for a left-censored Weibull
+    with exponential shape.
 
     Like `wbl_leftcensor_loglik` but shape depends exponentially on
     temperature: ``shape = kappa_0 * exp(b * T)``.
@@ -1309,7 +1330,8 @@ def wbl_leftcensor_loglik_bset_bexp(
     thr,
     b_set
 ):
-    """Compute log-likelihood for a left-censored Weibull with exponential shape, fixed b.
+    """Compute log-likelihood for a left-censored Weibull
+    with exponential shape, fixed b.
 
     Combines `wbl_leftcensor_loglik_exp` and `wbl_leftcensor_loglik_bset`:
     shape depends exponentially on temperature and ``b`` is fixed to
@@ -1363,9 +1385,12 @@ def _wbl_logpdf(x, shapes, scales):
     shapes = np.maximum(shapes, 1e-300)
     scales = np.maximum(scales, 1e-300)
     z = np.maximum(x / scales, 1e-300)
-    return (
+    log_z = np.log(z)
+    return np.maximum(
         np.log(shapes) - np.log(scales)
-        + (shapes - 1) * np.log(z) - np.exp(np.minimum(shapes * np.log(z), 709.0))
+        + np.minimum((shapes - 1) * log_z, 709.0)
+        - np.exp(np.minimum(shapes * log_z, 709.0)),
+        -709.0
     )
 
 
