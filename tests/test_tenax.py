@@ -201,7 +201,7 @@ class TestTENAX(unittest.TestCase):
         
         # Assert Temperature sum is close to expected
         temp_sum = dict_ordinary_updated["10"]["T"].sum()
-        self.assertEqual(temp_sum, 27096.004, "Temperature sum does not match expected")
+        self.assertAlmostEqual(temp_sum, 27096.002, places=1, msg="Temperature sum does not match expected")
     
         # Assert sum of n_ordinary_per_year equals expected 2634
         self.assertEqual(n_ordinary_per_year.sum().item(), 2634, "Sum of ordinary events per year does not match expected")

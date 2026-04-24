@@ -576,7 +576,7 @@ class TENAX:
                     start_idxs > 0, cumsum[np.maximum(start_idxs - 1, 0)], 0.0
                 )
                 prev_count = np.where(
-                    start_idxs > 0, 
+                    start_idxs > 0,
                     count_valid[np.maximum(start_idxs - 1, 0)],
                     0
                 )
