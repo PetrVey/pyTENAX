@@ -129,12 +129,12 @@ print(f"Time to do TENAX uncertainty: {time.time() - start_time:.4f} seconds")
 start_time = time.time()
 # TODO: clean this part cause it is a bit messy with namings
 S_SMEV = smev.SMEV(
-    threshold=0.1,
-    separation=24,
+    tolerance=0.1,
+    storm_separation_time=24,
     return_period=S.return_period,
     durations=S.durations,
     time_resolution=5,  # time resolution in minutes
-    min_duration=30,
+    min_event_duration=30,
     left_censoring=[S.left_censoring[1], 1],
 )
 
@@ -145,7 +145,7 @@ smev_RL = S_SMEV.smev_return_values(
     S_SMEV.return_period, smev_shape, smev_scale, n.item()
 )
 
-smev_RL_unc = S_SMEV.SMEV_bootstrap_uncertainty(P, blocks_id, S.niter_smev, n.item())
+smev_RL_unc = S_SMEV.smev_bootstrap_uncertainty(P, blocks_id, S.niter_smev, n.item())
 print(f"Time to do SMEV and uncertainty: {time.time() - start_time:.4f} seconds")
 
 

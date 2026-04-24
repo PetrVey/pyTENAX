@@ -292,8 +292,8 @@ def TNX_FIG_scaling(
     )  # quantile regression uncertainty
 
     ############################################################### PUT THIS ELSEWHERE
-    T_mc_bins = np.reshape(T_mc, [np.size(T), niter_smev])
-    P_mc_bins = np.reshape(P_mc, [np.size(P), niter_smev])
+    T_mc_bins = np.reshape(np.ravel(T_mc), [np.size(T), niter_smev])
+    P_mc_bins = np.reshape(np.ravel(P_mc), [np.size(P), niter_smev])
 
     qperc_model = np.zeros([np.size(iTs), 1000])
     qperc_obs = np.zeros([np.size(iTs), 1000])

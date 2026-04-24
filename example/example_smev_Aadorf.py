@@ -68,7 +68,7 @@ for dur in [str(d) for d in S_SMEV.durations]:
     blocks   = dict_ordinary[dur]["year"].to_numpy()
     shape, scale = S_SMEV.estimate_smev_parameters(P, S_SMEV.left_censoring)
     RL       = S_SMEV.smev_return_values(S_SMEV.return_period, shape, scale, n)
-    RL_unc   = S_SMEV.SMEV_bootstrap_uncertainty(P, blocks, 1000, n)
+    RL_unc   = S_SMEV.smev_bootstrap_uncertainty(P, blocks, 1000, n)
     boot_results[dur] = {"shape": shape, "scale": scale, "RL": RL, "RL_unc": RL_unc}
 print(f"Bootstrap uncertainty (all durations, 1000 iter): {(time.perf_counter()-t0)*1000:.1f} ms")
 
