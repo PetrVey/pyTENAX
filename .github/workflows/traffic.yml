@@ -2,13 +2,12 @@ name: Save GitHub Traffic
 
 on:
   schedule:
-    - cron: "30 23 * * *"  # daily at 23:30 UTC
+    - cron: "0 15 * * *"  # daily at 15:00 UTC
   workflow_dispatch:
 
 jobs:
   save-traffic:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout traffic-data branch
         uses: actions/checkout@v4
@@ -20,60 +19,52 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Download traffic data (views)
+      - name: Download traffic data
         run: |
           curl -s -H "Accept: application/vnd.github+json" \
                -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" \
                https://api.github.com/repos/PetrVey/pyTENAX/traffic/views \
                > views.json
 
-      - name: Download traffic data (clones)
-        run: |
           curl -s -H "Accept: application/vnd.github+json" \
                -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" \
                https://api.github.com/repos/PetrVey/pyTENAX/traffic/clones \
                > clones.json
-               
+
       - name: Debug – show API payloads
         run: |
-          echo "===== CLONES ====="
-          cat clones.json
-          echo ""
-          echo "===== VIEWS ====="
-          cat views.json
+          echo "===== VIEWS =====" && cat views.json
+          echo "===== CLONES =====" && cat clones.json
 
-      - name: Append today's traffic data
+      - name: Append yesterday's traffic data
         run: |
-          today=$(date -I -d "yesterday")
+          today=$(date -u -I -d "yesterday")
 
-          # Extract views and clones for today
           views_today=$(jq '[.views // [] | .[] | select(.timestamp | startswith("'"$today"'"))]' views.json)
           clones_today=$(jq '[.clones // [] | .[] | select(.timestamp | startswith("'"$today"'"))]' clones.json)
 
-          # --- If empty, create 0-count entries ---
-
+          # Zero-fill if API returned nothing for yesterday
           if [ "$(echo "$views_today" | jq 'length')" -eq 0 ]; then
             views_today=$(jq -n --arg t "$today" \
-              '[{ "timestamp": ($t + "T00:00:00Z"), "count": 0 }]')
+              '[{"timestamp": ($t+"T00:00:00Z"), "count": 0, "uniques": 0}]')
           fi
-
           if [ "$(echo "$clones_today" | jq 'length')" -eq 0 ]; then
             clones_today=$(jq -n --arg t "$today" \
-              '[{ "timestamp": ($t + "T00:00:00Z"), "count": 0 }]')
+              '[{"timestamp": ($t+"T00:00:00Z"), "count": 0, "uniques": 0}]')
           fi
 
-          # --- Ensure output files exist as valid arrays ---
-
-          [ -f traffic-views.json ] || echo "[]" > traffic-views.json
+          # Ensure output files exist as valid JSON arrays
+          [ -f traffic-views.json ]  || echo "[]" > traffic-views.json
           [ -f traffic-clones.json ] || echo "[]" > traffic-clones.json
 
-          # --- Append entries ---
+          # Append and deduplicate by timestamp (in case of re-runs)
+          jq --argjson new "$views_today" \
+            '. + $new | unique_by(.timestamp)' \
+            traffic-views.json > tmp && mv tmp traffic-views.json
 
-          jq --slurpfile new <(echo "$views_today") '. + $new[0]' \
-             traffic-views.json > tmp && mv tmp traffic-views.json
-
-          jq --slurpfile new <(echo "$clones_today") '. + $new[0]' \
-             traffic-clones.json > tmp && mv tmp traffic-clones.json
+          jq --argjson new "$clones_today" \
+            '. + $new | unique_by(.timestamp)' \
+            traffic-clones.json > tmp && mv tmp traffic-clones.json
 
       - name: Commit and push changes
         env:
@@ -82,6 +73,5 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add traffic-views.json traffic-clones.json
-
-          git diff --cached --quiet || git commit -m "Update traffic data for $(date -I)"
+          git diff --cached --quiet || git commit -m "Traffic data for $(date -u -I -d 'yesterday')"
           git push https://$PAT_TOKEN@github.com/PetrVey/pyTENAX.git traffic-data
