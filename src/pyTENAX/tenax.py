@@ -6,7 +6,13 @@ from scipy.optimize import root_scalar, minimize
 import time
 from scipy.optimize import curve_fit
 from typing import Union, Tuple, Dict
-from multiprocessing.dummy import Pool as ThreadPool
+from joblib import Parallel, delayed
+from pyTENAX.smev import (
+    _smev_inner_loop_numba_seq,
+    _smev_inner_loop_numba,
+    _NUMBA_AVAILABLE,
+)
+
 
 class TENAX:
     def __init__(
@@ -33,35 +39,61 @@ class TENAX:
 
         The TEmperaturedependent Non-Asymptotic statistical model for eXtreme
         return levels (TENAX), is based on a parsimonious nonstationary and
-        non-asymptotic theoretical framework that incorporates temperature as a covariate
-        in a physically consistent manner.
+        non-asymptotic theoretical framework that incorporates temperature
+        as a covariate in a physically consistent manner.
 
-        Args:
-            return_period (list[Union[int, float]]): Return periods [years].
-            durations (list[int]): Duration of interest [min].
-            beta (Union[float, int], optional): Shape parameter of the Generalized Normal for g(T). Defaults to 4.
-            temp_time_hour (int, optional): Time window to compute T [h]. Will be converted to negative if needed. Defaults to 24.
-            alpha (float, optional): Unitless significance level for the dependence of the shape on T. Defaults to 0.05.
-                - alpha = 0 --> dependence of shape on T is always allowed.
-                - alpha = 1 --> dependence of shape on T is never allowed.
-                - 0 < alpha < 1 --> dependence of shape on T depends on statistical significance at the alpha-level.
-            n_monte_carlo (int, optional): Number of elements in the MC samples. Defaults to int(2e4).
-            tolerance (float, optional): Maximum allowed fraction of missing data in one year. If exceeded, year will be disregarded from samples. Defaults to 0.1.
-            min_event_duration (int, optional): Minimum event duration [min]. Defaults to 30.
-            storm_separation_time (int, optional): Separation time between independent storms [hours]. Defaults to 24.
-            left_censoring (list, optional): 2-elements list with the limits in probability of the data to be used for the parameters estimation. Defaults to [0, 1].
-            niter_smev (int, optional): Number of iterations for uncertainty for the SMEV model. Defaults to 100.
-            niter_tenax (int, optional): Number of iterations for uncertainty for the TENAX model. Defaults to 100.
-            temp_res_monte_carlo (float, optional): Resolution in T for the MC samples. Defaults to 0.001.
-            temp_delta (int, optional): Range in T of MC samples. Explores temperatures up to Tdelt degrees higher and lower of the observed ones. Defaults to 10.
-            init_param_guess (list, optional): Initial values of Weibull parameters for `fminsearch`. Defaults to [0.7, 0, 2, 0].
-            min_rain (Union[float, int], optional): Minimum rainfall value. Defaults to 0.
+        Parameters
+        ----------
+        return_period : list[Union[int, float]]
+            Return periods [years].
+        durations : list[int]
+            Durations of interest [min].
+        time_resolution : int
+            Temporal resolution of the precipitation data [min].
+        beta : Union[float, int], optional
+            Shape parameter of the Generalized Normal for g(T). Defaults to 4.
+        temp_time_hour : int, optional
+            Time window to compute T [h]. Will be converted to negative if
+            needed. Defaults to 24.
+        alpha : float, optional
+            Unitless significance level for the dependence of the shape on T.
+            Defaults to 0.05.
+            0 → dependence always allowed; 1 → never allowed;
+            (0, 1) → depends on statistical significance at alpha-level.
+        n_monte_carlo : int, optional
+            Number of elements in the MC samples. Defaults to int(2e4).
+        tolerance : float, optional
+            Maximum allowed fraction of missing data in one year.
+            If exceeded, year will be disregarded. Defaults to 0.1.
+        min_event_duration : int, optional
+            Minimum event duration [min]. Defaults to 30.
+        storm_separation_time : int, optional
+            Separation time between independent storms [hours]. Defaults to 24.
+        left_censoring : list, optional
+            2-element list with lower and upper probability limits for
+            parameter estimation. Defaults to [0, 1].
+        niter_smev : int, optional
+            Number of bootstrap iterations for SMEV uncertainty. Defaults to
+            100.
+        niter_tenax : int, optional
+            Number of bootstrap iterations for TENAX uncertainty. Defaults to
+            100.
+        temp_res_monte_carlo : float, optional
+            Resolution in T for the MC samples. Defaults to 0.001.
+        temp_delta : int, optional
+            Range in T of MC samples — explores temperatures up to this many
+            degrees above and below observed values. Defaults to 10.
+        init_param_guess : list, optional
+            Initial values of Weibull parameters for optimisation.
+            Defaults to [0.7, 0, 2, 0].
+        min_rain : Union[float, int], optional
+            Minimum rainfall value. Defaults to 0.
         """
         self.return_period = return_period
         self.durations = durations
         self.time_resolution = time_resolution
         self.beta = beta
-        self.temp_time_hour = temp_time_hour if temp_time_hour < 0 else -temp_time_hour
+        self.temp_time_hour = -abs(temp_time_hour)
         self.alpha = alpha
         self.n_monte_carlo = n_monte_carlo
         self.tolerance = tolerance
@@ -78,37 +110,69 @@ class TENAX:
         self.__incomplete_years_removed__ = False
 
     def remove_incomplete_years(
-        self, data_pr: pd.DataFrame, name_col="value", nan_to_zero=True
+        self,
+        data_pr: pd.DataFrame,
+        name_col="value",
+        nan_to_zero=True,
     ) -> pd.DataFrame:
-        """Function that delete incomplete years in precipitation data.
-        An incomplete year is defined as a year where observations are missing above a given threshold.
+        """Delete incomplete years in precipitation data.
 
-        Args:
-            data_pr (pd.DataFrame): Dataframe containing (hourly) precipitation values.
-            name_col (str, optional): Column name in `data_pr` with precipitation values. Defaults to "value".
-            nan_to_zero (bool, optional): Set `nan` to zero. Defaults to True.
+        An incomplete year is defined as a year where observations are
+        missing above a given threshold.
 
-        Returns:
-            pd.DataFrame: Dataframe containing (hourly) precipitation values with incomplete years removed.
+        Parameters
+        ----------
+        data_pr : pd.DataFrame
+            Dataframe containing (hourly) precipitation values.
+        name_col : str, optional
+            Column name in `data_pr` with precipitation values.
+            Defaults to "value".
+        nan_to_zero : bool, optional
+            Set `nan` to zero. Defaults to True.
+
+        Returns
+        -------
+        pd.DataFrame
+            Dataframe containing (hourly) precipitation values
+            with incomplete years removed.
         """
         # Step 1: get resolution of dataset (MUST BE SAME in whole dataset!!!)
-        time_res = (data_pr.index[-1] - data_pr.index[-2]).total_seconds() / 60
+        time_res = (
+            (data_pr.index[-1] - data_pr.index[-2]).total_seconds() / 60
+        )
+        # Validate: if user provided time_resolution, it must match the data
+        if (
+            self.time_resolution is not None
+            and self.time_resolution != time_res
+        ):
+            raise ValueError(
+                "time_resolution provided "
+                f"({self.time_resolution} min) does not match "
+                f"the resolution detected from data ({time_res} min)."
+            )
         # Step 2: Resample by year and count total and NaN values
         yearly_valid = data_pr.resample("YE").apply(
             lambda x: x.notna().sum()
         )  # Count not NaNs per year
-        # Step 3: Estimate expected lenght of yearly timeseries
+        # Step 3: Estimate expected length of yearly timeseries
         expected = pd.DataFrame(index=yearly_valid.index)
-        expected["Total"] = 1440 / time_res * 365 # 1440 stands for the number of minutes in a day
-        # Step 4: Calculate percentage of missing data per year by aligning the dimensions
+        # 1440 = number of minutes in a day
+        expected["Total"] = 1440 / time_res * 365
+        # Step 4: Calculate percentage of missing data per year
         valid_percentage = yearly_valid[name_col] / expected["Total"]
-        # Step 3: Filter out years where more than 10% of the values are NaN
-        years_to_remove = valid_percentage[valid_percentage < 1 - self.tolerance].index
-        # Step 4: Remove data for those years from the original DataFrame
-        data_cleanded = data_pr[~data_pr.index.year.isin(years_to_remove.year)]
+        # Step 5: Filter out years where more than tolerance% of values are NaN
+        years_to_remove = valid_percentage[
+            valid_percentage < (1 - self.tolerance)
+        ].index
+        # Step 6: Remove data for those years from the original DataFrame
+        data_cleanded = data_pr[
+            ~data_pr.index.year.isin(years_to_remove.year)
+        ]
         # Replace NaN values with 0 in the specific column
         if nan_to_zero:
-            data_cleanded.loc[:, name_col] = data_cleanded[name_col].fillna(0)
+            data_cleanded.loc[:, name_col] = (
+                data_cleanded[name_col].fillna(0)
+            )
 
         self.time_resolution = time_res
 
@@ -118,92 +182,92 @@ class TENAX:
 
     def get_ordinary_events(
         self,
-        data: Union[np.ndarray, pd.DataFrame],
-        dates,
-        name_col="value",
+        data: Union[pd.DataFrame, np.ndarray],
+        dates: np.ndarray,
+        name_col: str = "value",
         check_gaps=True,
     ) -> list:
-        """
+        """Extract ordinary precipitation events from a time series.
 
-        Function that extracts ordinary precipitation events out of the entire data.
-        This also check and delete for ordinary events with unknown start/end if check_gaps = True.
+        Groups timesteps at or above ``self.min_rain`` into independent storm
+        events separated by at least ``self.storm_separation_time`` hours.
+        Optionally removes events too close to dataset boundaries or data gaps.
 
         Parameters
         ----------
-        - data (np.array): array containing the hourly values of precipitation.
-        - separation (int): The number of hours used to define an independet ordianry event. Defult: 24 hours. this is saved in SMEV S class
-                        Days with precipitation amounts above this threshold are considered as ordinary events.
-        - name_col (string): The name of the pandas DataFrame column if input is pandas df.
-        - check_gaps (bool): Delete ordinary events with unknow start/end
+        data : Union[pd.DataFrame, np.ndarray]
+            Precipitation values.
+        dates : np.ndarray
+            Timestamps of the precipitation data.
+        name_col : str, optional
+            Column name to use when ``data`` is a DataFrame. Defaults to
+            "value".
+        check_gaps : bool, optional
+            Remove events that fall within ``storm_separation_time`` of the
+            dataset boundaries or internal data gaps. Defaults to True.
 
         Returns
         -------
-        - consecutive_values (list): index of time of consecutive values defining the ordinary events.
-        
-
-
-        Examples
-        --------
+        list
+            List of np.ndarray, each containing the timestamps of one ordinary
+            event (values >= ``self.min_rain`` separated by more than
+            ``self.storm_separation_time`` hours).
         """
+        if not self.__incomplete_years_removed__:
+            raise ValueError(
+                "You must run 'remove_incomplete_years' "
+                "before running this function. "
+                "If you are sure your data is complete, set "
+                "self.__incomplete_years_removed__ = True "
+                "to bypass this check."
+            )
+
         if isinstance(data, pd.DataFrame):
-            # Find values above threshold
-            above_threshold = data[data[name_col] > self.min_rain]
-            # Find consecutive values above threshold separated by more than 24 observations
-            consecutive_values = []
-            temp = []
-            for index, row in above_threshold.iterrows():
-                if not temp:
-                    temp.append(index)
-                else:
-                    if index - temp[-1] > pd.Timedelta(
-                        hours=self.storm_separation_time
-                    ):
-                        if len(temp) >= 1:
-                            consecutive_values.append(temp)
-                        temp = []
-                    temp.append(index)
-            if len(temp) >= 1:
-                consecutive_values.append(temp)
+            data = np.array(data[name_col])
 
-        elif isinstance(data, np.ndarray):
-            # Assuming data is your numpy array
-            # Assuming name_col is the index for comparing threshold
-            # Assuming threshold is the value above which you want to filter
+        dates = dates.astype("datetime64[ns]")
 
+        if self.min_rain == 0:
             above_threshold_indices = np.where(data > self.min_rain)[0]
+        else:
+            above_threshold_indices = np.where(data >= self.min_rain)[0]
 
-            # Find consecutive values above threshold separated by more than 24 observations
-            consecutive_values = []
-            temp = []
-            for index in above_threshold_indices:
-                if not temp:
-                    temp.append(index)
-                else:
-                    # numpy delta is in nanoseconds, it  might be better to do dates[index] - dates[temp[-1]]).item() / np.timedelta64(1, 'm')
-                    if (
-                        (dates[index] - dates[temp[-1]]).item()
-                        > (self.storm_separation_time * 3.6e12)
-                    ):  # Assuming 24 is the number of hours, nanoseconds * 3.6e+12 = hours
-                        if len(temp) >= 1:
-                            consecutive_values.append(dates[temp])
-                        temp = []
-                    temp.append(index)
-            if len(temp) >= 1:
-                consecutive_values.append(dates[temp])
+        if len(above_threshold_indices) == 0:
+            return []
+
+        # Get dates at above-threshold positions
+        above_dates = dates[above_threshold_indices]
+
+        # Compute time differences between consecutive above-threshold
+        # timesteps (in nanoseconds)
+        time_diffs_above = np.diff(above_dates).astype(np.int64)
+
+        # Find where gaps exceed separation time (hours to nanoseconds)
+        separation_ns = int(self.storm_separation_time * 3.6e12)
+        gap_mask = time_diffs_above > separation_ns
+
+        # Split indices at gap locations
+        split_points = np.where(gap_mask)[0] + 1
+
+        # Split into groups of indices, then map back to dates
+        index_groups = np.split(above_threshold_indices, split_points)
+
+        # Convert to list of date arrays (same format as original)
+        consecutive_values = [dates[group] for group in index_groups]
 
         if check_gaps:
-            # remove event that starts before dataset starts in regard of separation time
+            # Remove event too close to the start of the dataset
             if (consecutive_values[0][0] - dates[0]).item() < (
                 self.storm_separation_time * 3.6e12
-            ):  # this numpy dt, so still in nanoseconds
+            ):  # numpy dt is in nanoseconds
                 consecutive_values.pop(0)
             else:
                 pass
 
-            # remove event that ends before dataset ends in regard of separation time
+            # Remove event too close to the end of the dataset
             if (dates[-1] - consecutive_values[-1][-1]).item() < (
                 self.storm_separation_time * 3.6e12
-            ):  # this numpy dt, so still in nanoseconds
+            ):  # numpy dt is in nanoseconds
                 consecutive_values.pop()
             else:
                 pass
@@ -213,12 +277,12 @@ class TENAX:
             time_diffs = np.diff(dates)
             # difference of first element is time resolution
             time_res = time_diffs[0]
-            # Identify gaps (where the difference is greater than 1 hour)
-            gap_indices_end = np.where(
-                time_diffs
-                > np.timedelta64(int(self.storm_separation_time * 3.6e12), "ns")
-            )[0]
-            # extend by another index in gap cause we need to check if there is OE there too
+            # Identify gaps larger than separation time
+            sep_td = np.timedelta64(
+                int(self.storm_separation_time * 3.6e12), "ns"
+            )
+            gap_indices_end = np.where(time_diffs > sep_td)[0]
+            # Extend by one index to also check OE near gap start
             gap_indices_start = gap_indices_end + 1
 
             match_info = []
@@ -227,12 +291,12 @@ class TENAX:
                 start_date = end_date - np.timedelta64(
                     int(self.storm_separation_time * 3.6e12), "ns"
                 )
-                # Creating an array from start_date to end_date in hourly intervals
                 temp_date_array = np.arange(start_date, end_date, time_res)
 
-                # Checking for matching indices in consecutive_values
                 for i, sub_array in enumerate(consecutive_values):
-                    match_indices = np.where(np.isin(sub_array, temp_date_array))[0]
+                    match_indices = np.where(
+                        np.isin(sub_array, temp_date_array)
+                    )[0]
                     if match_indices.size > 0:
                         match_info.append(i)
 
@@ -241,12 +305,12 @@ class TENAX:
                 end_date = start_date + np.timedelta64(
                     int(self.storm_separation_time * 3.6e12), "ns"
                 )
-                # Creating an array from start_date to end_date in hourly intervals
                 temp_date_array = np.arange(start_date, end_date, time_res)
 
-                # Checking for matching indices in consecutive_values
                 for i, sub_array in enumerate(consecutive_values):
-                    match_indices = np.where(np.isin(sub_array, temp_date_array))[0]
+                    match_indices = np.where(
+                        np.isin(sub_array, temp_date_array)
+                    )[0]
                     if match_indices.size > 0:
                         match_info.append(i)
 
@@ -256,257 +320,307 @@ class TENAX:
         return consecutive_values
 
     def remove_short(
-        self, list_ordinary: list
-    ) -> Tuple[np.ndarray, np.ndarray, pd.Series]:
-        """Function that removes ordinary events that are too short.
+        self,
+        list_ordinary: list,
+    ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
+        """Remove ordinary events that are too short.
 
-        Args:
-            list_ordinary (list): list of indices of ordinary events as returned by `get_ordinary_events()`.
+        Parameters
+        ----------
+        list_ordinary : list
+            List of ordinary events as returned by `get_ordinary_events()`.
+            Each event may contain pd.Timestamp or np.datetime64 values.
 
-        Returns:
-            arr_vals (np.ndarray): Array with indices of events that are not too short.
-            arr_dates (np.ndarray):  Array with tuple consisting of start and end dates of events that are not too short.
-            n_ordinary_per_year (pd.Series): Series with the number of ordinary events per year.
-
+        Returns
+        -------
+        arr_vals : np.ndarray
+            Boolean array (all True) of length equal to the number of kept
+            events, one entry per event that passed the duration filter.
+        arr_dates : np.ndarray
+            Array of (end, start) date tuples for each kept event.
+        n_ordinary_per_year : pd.DataFrame
+            DataFrame with the count of ordinary events per year.
         """
         if not self.__incomplete_years_removed__:
             raise ValueError(
-                "You must run 'remove_incomplete_years' before running this function."
+                "You must run 'remove_incomplete_years' "
+                "before running this function. "
+                "If you are sure your data is complete, set "
+                "self.__incomplete_years_removed__ = True "
+                "to bypass this check."
             )
 
+        # Convert pd.Timestamp events to np.datetime64 if needed
         if isinstance(list_ordinary[0][0], pd.Timestamp):
-            # event is multiplied by its lenght to get duration and compared with min_duration setup
-            ll_short = [
-                True
-                if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
-                >= pd.Timedelta(minutes=self.min_event_duration)
-                else False
+            list_ordinary = [
+                np.array([t.to_datetime64() for t in ev])
                 for ev in list_ordinary
             ]
-            ll_dates = [
-                (
-                    ev[-1].strftime("%Y-%m-%d %H:%M:%S"),
-                    ev[0].strftime("%Y-%m-%d %H:%M:%S"),
-                )
-                if ev[-1] - ev[0] + pd.Timedelta(minutes=self.time_resolution)
-                >= pd.Timedelta(minutes=self.min_event_duration)
-                else (np.nan, np.nan)
-                for ev in list_ordinary
-            ]
-            arr_vals = np.array(ll_short)[ll_short]
-            arr_dates = np.array(ll_dates)[ll_short]
 
-            filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
-            list_year = pd.DataFrame(
-                [filtered_list[_][0].year for _ in range(len(filtered_list))],
-                columns=["year"],
-            )
-            n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
+        min_duration = np.timedelta64(int(self.min_event_duration), "m")
+        time_res = np.timedelta64(int(self.time_resolution), "m")
 
-        elif isinstance(list_ordinary[0][0], np.datetime64):
-            ll_short = [
-                True
-                if (ev[-1] - ev[0]).astype("timedelta64[m]")
-                + np.timedelta64(int(self.time_resolution), "m")
-                >= pd.Timedelta(minutes=self.min_event_duration)
-                else False
-                for ev in list_ordinary
-            ]
-            ll_dates = [
-                (ev[-1], ev[0])
-                if (ev[-1] - ev[0]).astype("timedelta64[m]")
-                + np.timedelta64(int(self.time_resolution), "m")
-                >= pd.Timedelta(minutes=self.min_event_duration)
-                else (np.nan, np.nan)
-                for ev in list_ordinary
-            ]
-            arr_vals = np.array(ll_short)[ll_short]
-            arr_dates = np.array(ll_dates)[ll_short]
+        ll_short = [
+            (ev[-1] - ev[0]).astype("timedelta64[m]") + time_res
+            >= min_duration
+            for ev in list_ordinary
+        ]
+        ll_dates = [
+            (ev[-1], ev[0]) if keep else (np.nan, np.nan)
+            for ev, keep in zip(list_ordinary, ll_short)
+        ]
 
-            filtered_list = [x for x, keep in zip(list_ordinary, ll_short) if keep]
-            list_year = pd.DataFrame(
-                [
-                    filtered_list[_][0].astype("datetime64[Y]").item().year
-                    for _ in range(len(filtered_list))
-                ],
-                columns=["year"],
-            )
-            n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
+        arr_vals = np.array(ll_short)[ll_short]
+        arr_dates = np.array(ll_dates)[ll_short]
+
+        filtered_list = [
+            ev for ev, keep in zip(list_ordinary, ll_short) if keep
+        ]
+        list_year = pd.DataFrame(
+            [ev[0].astype("datetime64[Y]").item().year
+             for ev in filtered_list],
+            columns=["year"],
+        )
+        n_ordinary_per_year = list_year.reset_index().groupby(["year"]).count()
 
         return arr_vals, arr_dates, n_ordinary_per_year
 
     def get_ordinary_events_values(
-        self, data: np.ndarray, dates: np.ndarray, arr_dates_oe
+        self,
+        data: np.ndarray,
+        dates: np.ndarray,
+        arr_dates_oe: np.ndarray,
+        method: str = "vectorized",
     ) -> Tuple[Dict[str, pd.DataFrame], Dict[str, pd.DataFrame]]:
-        """
-        Function that extract ordinary events and annual maximas out of precpitation data. 
-        
+        """Extract ordinary events and annual maxima from precipitation data.
+
         Parameters
         ----------
-        data (np.ndarray): data of full precipitation dataset
-        dates (np.ndarray): time of full precipitation dataset
-        arr_dates_oe (np.ndarray): end and start of ordinary event as retruned by remove_short function.
+        data : np.ndarray
+            Full precipitation time series.
+        dates : np.ndarray
+            Timestamps of the full precipitation dataset.
+        arr_dates_oe : np.ndarray
+            End and start times of ordinary events as returned by
+            `remove_short`.
+        method : str, optional
+            Backend used for the sliding-window maximum search. Defaults to
+            ``"vectorized"``. One of:
+
+            - ``"vectorized"``    — pure numpy, ``np.convolve`` per event.
+            - ``"njit"``          — numba JIT-compiled loop, single-threaded.
+            - ``"njit_parallel"`` — numba JIT-compiled loop, parallelised
+              over events. Requires ``numba`` to be installed.
 
         Returns
         -------
-        dict_ordinary (dict): key is duration, value is pd.DataFrame with year, oe_time and value of ordinary event (eg. depth)
-            contains ordinary events values per duration.
-            example dict_ordinary = {"10" : pd.DataFrame(columns=['year', 'oe_time', 'ordinary'])
-        dict_AMS (dict): key is duration, value is pd.DataFrame with year and the annual maxima (AMS) value.
-            contains anual maximas for each year per duration.
-
+        dict_ordinary : dict
+            Key is duration (str), value is a ``pd.DataFrame`` with columns
+            ``year``, ``oe_time``, ``ordinary`` (event depth/intensity).
+        dict_AMS : dict
+            Key is duration (str), value is a ``pd.DataFrame`` with columns
+            ``year`` and ``AMS`` (annual maximum value).
         """
+        if method in ("njit", "njit_parallel") and not _NUMBA_AVAILABLE:
+            raise ImportError(
+                "numba is required for method='njit'/'njit_parallel'. "
+                "Install with: pip install numba"
+            )
+
         dict_ordinary = {}
         dict_AMS = {}
+
+        time_index = dates.reshape(-1)
+        n_events = arr_dates_oe.shape[0]
+
+        oe_end = arr_dates_oe[:, 0].astype("datetime64[ns]")
+        oe_start = arr_dates_oe[:, 1].astype("datetime64[ns]")
+        start_indices = np.searchsorted(time_index, oe_start).astype(np.int64)
+        end_indices = np.searchsorted(time_index, oe_end).astype(np.int64)
+
+        ll_yrs = np.array([
+            oe_end[i].astype("datetime64[Y]").item().year
+            for i in range(n_events)
+        ], dtype=np.int64)
+
+        unique_years = np.unique(ll_yrs)
+        year_masks = {yr: ll_yrs == yr for yr in unique_years}
+
+        data_int = np.round(data * 10000).astype(np.int64)
+
         for d in range(len(self.durations)):
-            arr_conv = np.convolve(
-                data,
-                np.ones(int(self.durations[d] / self.time_resolution), dtype=int),
-                "same",
-            )
+            window_size = int(self.durations[d] / self.time_resolution)
 
-            # Convert time index to numpy array
-            time_index = dates.reshape(-1)
+            if method == "vectorized":
+                ones_kernel = np.ones(window_size, dtype=np.int64)
+                max_vals = np.empty(n_events, dtype=np.float64)
+                max_global_idx = np.empty(n_events, dtype=np.int64)
+                for i in range(n_events):
+                    si = start_indices[i]
+                    ei = end_indices[i]
+                    if si == ei:
+                        max_vals[i] = data_int[si] / 10000.0
+                        max_global_idx[i] = si
+                    else:
+                        arr_conv = np.convolve(
+                            data_int[si:ei + 1], ones_kernel, "same"
+                        )
+                        ll_idx = np.nanargmax(arr_conv)
+                        max_vals[i] = arr_conv[ll_idx] / 10000.0
+                        max_global_idx[i] = si + ll_idx
+            elif method == "njit":
+                max_vals_int, max_global_idx = _smev_inner_loop_numba_seq(
+                    data_int, start_indices, end_indices, window_size, n_events
+                )
+                max_vals = max_vals_int / 10000.0
+            else:  # njit_parallel
+                max_vals_int, max_global_idx = _smev_inner_loop_numba(
+                    data_int, start_indices, end_indices, window_size, n_events
+                )
+                max_vals = max_vals_int / 10000.0
 
-            # Use numpy indexing to get the max values efficiently
-            ll_vals = []
-            ll_dates = []
-            for i in range(arr_dates_oe.shape[0]):
-                start_time_idx = np.searchsorted(time_index, arr_dates_oe[i, 1])
+            ll_dates_arr = time_index[max_global_idx]
+            ams_vals = np.array([
+                np.max(max_vals[mask]) for _, mask in year_masks.items()
+            ])
 
-                end_time_idx = np.searchsorted(time_index, arr_dates_oe[i, 0])
-
-                # Check if start and end times are the same
-                if start_time_idx == end_time_idx:
-                    ll_val = arr_conv[start_time_idx]
-                    ll_date = time_index[start_time_idx]
-                else:
-                    # the +1 in end_time_index is because then we search by index but we want to includde last as well,
-                    # without, it slices eg. end index is 10, without +1 it slices 0 to 9 instead of 0 to 10 (stops 1 before)
-                    # get index of ll_val within the sliced array and perform convolve in this slice
-                    arr_conv2 = np.convolve(data[start_time_idx : end_time_idx + 1],
-                                            np.ones(int(self.durations[d] / self.time_resolution), dtype=int),
-                                            "same",
-                                        )
-                    # get index of max value in convolve vector
-                    ll_idx_in_slice = np.nanargmax(arr_conv2)
-
-                    # adjust the index to refer to the original arr_conv
-                    ll_idx_in_arr_conv = start_time_idx + ll_idx_in_slice
-                    ll_val = arr_conv2[ll_idx_in_slice]
-                    ll_date = time_index[ll_idx_in_arr_conv]
-
-                ll_vals.append(ll_val)
-                ll_dates.append(ll_date)
-
-            # years  of ordinary events
-            ll_yrs = [
-                arr_dates_oe[_, 0].astype("datetime64[Y]").item().year
-                for _ in range(arr_dates_oe.shape[0])
-            ]
-
-            blocks = np.unique(ll_yrs)
-
-            AMS = {}
-            for j in blocks:
-                indices = [index for index, value in enumerate(ll_yrs) if value == j]
-                slice_ll_vals = [ll_vals[i] for i in indices]
-                AMS[j] = max(slice_ll_vals)
-
-            df_ams = pd.DataFrame({"year": [*AMS.keys()], "AMS": [*AMS.values()]})
-            df_oe = pd.DataFrame(
-                {"year": ll_yrs, "oe_time": ll_dates, "ordinary": ll_vals}
-            )
-            dict_AMS.update({f"{self.durations[d]}": df_ams})
-            dict_ordinary.update({f"{self.durations[d]}": df_oe})
+            df_ams = pd.DataFrame({"year": unique_years, "AMS": ams_vals})
+            df_oe = pd.DataFrame({
+                "year": ll_yrs,
+                "oe_time": ll_dates_arr,
+                "ordinary": max_vals,
+            })
+            dict_AMS[f"{self.durations[d]}"] = df_ams
+            dict_ordinary[f"{self.durations[d]}"] = df_oe
 
         return dict_ordinary, dict_AMS
 
-    def associate_vars(self, dict_ordinary, data_temperature, dates_temperature):
-        """
-        Associate temperature with an ordinary event based on its start datetime.
-        The associated temperature is the mean of the past X hours, as defined by temp_time_hour.
-        The ordinary event is removed if a corresponding temperature cannot be found.
-        
+    def associate_vars(
+        self,
+        dict_ordinary,
+        data_temperature,
+        dates_temperature,
+        method="vectorized",
+    ):
+        """Associate temperature with each ordinary event.
+
+        The associated temperature is the mean over the past ``temp_time_hour``
+        hours before the event. Events for which no temperature can be found
+        are dropped.
+
         Parameters
         ----------
-        dict_ordinary (dict) : dictionary of ordinary events as retruned by get_ordinary_events_values function
-        data_temperature (np.ndarray): data of full precipitation dataset
-        dates_temperature (np.ndarray): time of full precipitation dataset
+        dict_ordinary : dict
+            Dictionary of ordinary events as returned by
+            `get_ordinary_events_values`.
+        data_temperature : np.ndarray
+            Full temperature time series.
+        dates_temperature : np.ndarray
+            Timestamps of the full temperature dataset.
+        method : str, optional
+            Backend used for the temperature association. Defaults to
+            ``"iterrows"``. One of:
+
+            - ``"iterrows"``   — pandas iterrows loop (original behaviour).
+            - ``"vectorized"`` — fully vectorised numpy using cumulative-sum
+              trick; O(1) per event after one O(n) precomputation pass.
 
         Returns
         -------
-        dict_ordinary (dict) : A dictionary of ordinary events with associated temperature, categorized by duration
-                               example dict_ordinary = {"10" : pd.DataFrame(columns=['year', 'oe_time', 'ordinary', 'T'])
-        dict_dropped_oe (dict): A dictionary of dropped ordinary events for which the associated temperature was not found, categorized by duration
-        n_ordinary_per_year_new (pd.Series): Series with the number of ordinary events per year
-
+        dict_ordinary : dict
+            Ordinary events with an added ``T`` column, keyed by duration.
+            Example: ``{"10": pd.DataFrame(
+                columns=['year', 'oe_time', 'ordinary', 'T'])}``.
+        dict_dropped_oe : dict
+            Ordinary events dropped because no temperature was found,
+            keyed by duration.
+        n_ordinary_per_year_new : pd.DataFrame
+            DataFrame with the count of ordinary events per year after
+            dropping events without temperature.
         """
-        # start here
         dict_dropped_oe = {}
         time_index = dates_temperature.reshape(-1)
-
         delta_time = np.timedelta64(int(self.temp_time_hour), "h")
+
+        if method == "vectorized":
+            # Precompute cumulative sum and valid-count once over full series
+            nan_mask = np.isnan(data_temperature)
+            data_filled = data_temperature.copy()
+            data_filled[nan_mask] = 0.0
+            cumsum = np.cumsum(data_filled)
+            count_valid = np.cumsum(~nan_mask)
+
         for d in self.durations:
             df_oe = dict_ordinary[f"{d}"]
-            arr_dates_oe = np.array(df_oe["oe_time"])
-            ll_vals = []
+            arr_dates_oe = np.array(df_oe["oe_time"], dtype=time_index.dtype)
 
-            # Prepare indices for using pandas `merge_asof` function
-            df_time_index = pd.DataFrame({"time_index": time_index})
-            df_arr_dates_oe = pd.DataFrame({"oe_time": arr_dates_oe})
+            if method == "vectorized":
+                # Vectorized nearest-neighbour search for all events at once
+                idx = np.searchsorted(time_index, arr_dates_oe, side="right")
+                idx = np.clip(idx, 1, len(time_index) - 1)
+                dist_left = (
+                    arr_dates_oe - time_index[idx - 1]
+                             ).astype(np.int64)
+                dist_right = (
+                    time_index[idx] - arr_dates_oe
+                    ).astype(np.int64)
+                closest_idxs = np.where(dist_left <= dist_right, idx - 1, idx)
 
-            # Use pandas to perform an "as-of" merge that efficiently finds the closest index, 30 are handled to nearest lower
-            merged = pd.merge_asof(
-                df_arr_dates_oe,
-                df_time_index,
-                left_on="oe_time",
-                right_on="time_index",
-                direction="nearest",
-            )
+                # Vectorized window start indices
+                start_times = time_index[closest_idxs] + delta_time
+                start_idxs = np.searchsorted(time_index, start_times,
+                                             side="left")
 
-            for _, row in merged.iterrows():
-                end_time = row["time_index"]
+                # Cumsum trick: O(1) per event mean using precomputed arrays
+                prev_cumsum = np.where(
+                    start_idxs > 0, cumsum[np.maximum(start_idxs - 1, 0)], 0.0
+                )
+                prev_count = np.where(
+                    start_idxs > 0,
+                    count_valid[np.maximum(start_idxs - 1, 0)],
+                    0
+                )
+                sums = cumsum[closest_idxs] - prev_cumsum
+                counts = count_valid[closest_idxs] - prev_count
+                ll_vals = np.where(counts > 0, np.round(sums / counts, 3),
+                                   np.nan)
 
-                # Find the index of the closest time directly using `np.searchsorted`
-                if end_time is None:
-                    continue  # Skip this iteration if no match was found
+            else:  # iterrows
+                ll_vals = []
+                df_time_index = pd.DataFrame({"time_index": time_index})
+                df_arr_dates_oe = pd.DataFrame({"oe_time": arr_dates_oe})
+                merged = pd.merge_asof(
+                    df_arr_dates_oe,
+                    df_time_index,
+                    left_on="oe_time",
+                    right_on="time_index",
+                    direction="nearest",
+                )
+                for _, row in merged.iterrows():
+                    end_time = row["time_index"]
+                    if end_time is None:
+                        continue
+                    end_dt = np.datetime64(end_time)
+                    closest_idx = np.searchsorted(time_index, end_dt)
+                    end_time_minus_delta = time_index[closest_idx] + delta_time
+                    start_time_idx = np.searchsorted(time_index,
+                                                     end_time_minus_delta)
+                    slc = data_temperature[start_time_idx:closest_idx + 1]
+                    if np.all(np.isnan(slc)):
+                        ll_vals.append(np.nan)
+                    else:
+                        ll_vals.append(np.nanmean(slc).round(decimals=3))
 
-                # Use `np.searchsorted` to find the index in `time_index`
-                closest_idx = np.searchsorted(time_index, np.datetime64(end_time))
-
-                # Calculate end time with delta
-                end_time_minus_delta = time_index[closest_idx] + delta_time
-
-                # Find start index efficiently
-                start_time_idx = np.searchsorted(time_index, end_time_minus_delta)
-
-                # Slice array more efficiently
-                ll_idx_in_slice_vals = data_temperature[
-                    start_time_idx : closest_idx + 1
-                ]
-
-                # Compute mean using vectorized method
-                if np.all(np.isnan(ll_idx_in_slice_vals)):
-                    ll_val = np.nan
-                else:
-                    ll_val = np.nanmean(ll_idx_in_slice_vals).round(decimals=3)
-                ll_vals.append(ll_val)
-
-            # Assign computed list back to DataFrame
             dict_ordinary[f"{d}"]["T"] = ll_vals
-
-            # Locate rows with NaN and saved them
             dict_dropped_oe[f"{d}"] = dict_ordinary[f"{d}"][
                 dict_ordinary[f"{d}"]["T"].isna()
             ]
-
-            # Drop rows with NaN in the "T" column from the original DataFrame
             dict_ordinary[f"{d}"] = (
-                dict_ordinary[f"{d}"].dropna(subset=["T"]).reset_index(drop=True)
+                dict_ordinary[f"{d}"]
+                .dropna(subset=["T"])
+                .reset_index(drop=True)
             )
 
-        # Recalculate number of OE
         n_ordinary_per_year_new = (
             dict_ordinary[f"{d}"]
             .groupby(["year"])["ordinary"]
@@ -515,10 +629,18 @@ class TENAX:
         )
 
         return dict_ordinary, dict_dropped_oe, n_ordinary_per_year_new
-    
-    def magnitude_model(self, data_oe_prec, data_oe_temp, thr, b_set = None, b_exp = False):
+
+    def magnitude_model(
+        self,
+        data_oe_prec,
+        data_oe_temp,
+        thr,
+        b_set=None,
+        b_exp=False,
+        minimize_method='Nelder-Mead'
+    ):
         """
-        Fits the data to the magnitude model of TENAX. 
+        Fits the data to the magnitude model of TENAX.
 
         Parameters
         ----------
@@ -532,147 +654,198 @@ class TENAX:
             Set value of b. fits magnitude model with a specified value for b.
         b_exp : bool
             If True, uses the exponential rather than linear fit for b.
+        minimize_method : str, optional
+            Optimisation method passed to ``scipy.optimize.minimize``.
+            Defaults to ``'Nelder-Mead'``.
+            Tested also ``'L-BFGS-B'``, though it can lead to some instability
 
 
         Returns
         -------
-        phat : numpy.ndarray
-            Parameters of the magnitude model. [kappa_0,b,lambda_0,a].
-        loglik : numpy.float64
-            Log likelihood.
-        loglik_H1 : numpy.float64
-            Log likelihood of alternative hypothesis.
-        loglik_H0shape : numpy.float64
-            Log likelihood of null hypothesis.
-
+        phat : np.ndarray
+            Fitted parameters ``[kappa_0, b, lambda_0, a]``.
+        loglik : float
+            Log-likelihood of the selected model.
+        loglik_H1 : float or None
+            Log-likelihood of the alternative hypothesis (H1). ``None`` when
+            ``b_set`` is provided.
+        loglik_H0shape : float or None
+            Log-likelihood of the null hypothesis (constant shape). ``None``
+            when ``b_set`` is provided.
         """
-        # alpha=0 --> dependence of shape on T is always allowed 
-        # alpha=1 --> dependence of shape on T is never allowed 
+        # alpha=0 --> dependence of shape on T is always allowed
+        # alpha=1 --> dependence of shape on T is never allowed
         # else    --> dependence of shape on T depends on stat. significance
-        
+
         P = data_oe_prec
         T = data_oe_temp
-        thr = thr
         init_g = self.init_param_guess
         alpha = self.alpha
-        
-        if b_set: 
+
+        # Precompute split once — mask never changes during optimisation
+        mask = P < thr
+        T0, P1, T1 = T[mask], P[~mask], T[~mask]
+
+        if minimize_method == 'L-BFGS-B':
+            h0_options = {'gtol': 1e-8, 'ftol': 1e-8, 'maxiter': 1000}
+            bounds = [(1e-6, None), (-0.3, 0.3), (1e-6, None), (-0.3, 0.3)]
+        elif minimize_method == 'Nelder-Mead':
+            h0_options = {'xatol': 1e-8, 'fatol': 1e-8, 'maxiter': 1000}
+            bounds = None
+        else:
+            h0_options = {'maxiter': 1000}
+            bounds = None
+
+        if b_set:
             if b_exp:
-                min_phat_bset = minimize(lambda theta: -wbl_leftcensor_loglik_bset_bexp(theta, P, T, thr,b_set), 
-                                       init_g, 
-                                       method='Nelder-Mead')
+                min_phat_bset = minimize(
+                    lambda theta: -wbl_leftcensor_loglik_bset_bexp(
+                        theta, T0, P1, T1, thr, b_set
+                    ),
+                    init_g,
+                    method=minimize_method,
+                    bounds=bounds)
                 phat_bset = min_phat_bset.x
-                loglik_bset = wbl_leftcensor_loglik_bset_bexp(phat_bset,P,T,thr,b_set)
+                loglik_bset = wbl_leftcensor_loglik_bset_bexp(
+                    phat_bset, T0, P1, T1, thr, b_set
+                )
                 phat_bset[1] = b_set
                 phat = phat_bset
                 loglik = loglik_bset
-                loglik_H1, loglik_H0shape = None, None #TODO: figure this out, do we need these outputs?
+                # TODO: figure this out, do we need these outputs?
+                loglik_H1, loglik_H0shape = None, None
             else:
-                min_phat_bset = minimize(lambda theta: -wbl_leftcensor_loglik_bset(theta, P, T, thr,b_set), 
-                                       init_g, 
-                                       method='Nelder-Mead')
+                min_phat_bset = minimize(
+                    lambda theta: -wbl_leftcensor_loglik_bset(
+                        theta, T0, P1, T1, thr, b_set
+                    ),
+                    init_g,
+                    method=minimize_method,
+                    bounds=bounds)
                 phat_bset = min_phat_bset.x
-                loglik_bset = wbl_leftcensor_loglik_bset(phat_bset,P,T,thr,b_set)
+                loglik_bset = wbl_leftcensor_loglik_bset(
+                    phat_bset, T0, P1, T1, thr, b_set
+                )
                 phat_bset[1] = b_set
                 phat = phat_bset
                 loglik = loglik_bset
-                loglik_H1, loglik_H0shape = None, None #TODO: figure this out, do we need these outputs?
-            
+                # TODO: figure this out, do we need these outputs?
+                loglik_H1, loglik_H0shape = None, None
+
         elif b_exp:
-            
-            min_phat_H1 = minimize(lambda theta: -wbl_leftcensor_loglik_exp(theta, P, T, thr), 
-                                   init_g, 
-                                   method='Nelder-Mead')
+            min_phat_H1 = minimize(
+                lambda theta: -wbl_leftcensor_loglik_exp(
+                    theta, T0, P1, T1, thr
+                ),
+                init_g,
+                method=minimize_method)
             phat_H1 = min_phat_H1.x
 
+            init_H0shape = np.array([phat_H1[0], 0, phat_H1[2], phat_H1[3]])
+            min_phat_H0shape = minimize(
+                lambda theta: -wbl_leftcensor_loglik_H0shape(
+                    theta, T0, P1, T1, thr
+                ),
+                init_H0shape,
+                method=minimize_method,
+                bounds=bounds,
+                options=h0_options)
 
-            
-            min_phat_H0shape = minimize(lambda theta: -wbl_leftcensor_loglik_H0shape(theta, P, T, thr), 
-                                   init_g, 
-                                   method='Nelder-Mead',
-                                   options={'xatol': 1e-8, 'fatol': 1e-8, 'maxiter': 1000})
-            
             phat_H0shape = min_phat_H0shape.x
             phat_H0shape[1] = 0
-            
-            loglik_H1 = wbl_leftcensor_loglik_exp(phat_H1,P,T,thr)
-            loglik_H0shape = wbl_leftcensor_loglik_H0shape(phat_H0shape,P,T,thr)
-            lambda_LR_shape = -2*( loglik_H0shape - loglik_H1 )
+
+            loglik_H1 = wbl_leftcensor_loglik_exp(
+                phat_H1, T0, P1, T1, thr
+            )
+            loglik_H0shape = wbl_leftcensor_loglik_H0shape(
+                phat_H0shape, T0, P1, T1, thr
+            )
+            lambda_LR_shape = -2*(loglik_H0shape - loglik_H1)
             pval = chi2.sf(lambda_LR_shape, df=1)
-            
-            
-            if alpha==0 : # dependence of shape on T is always allowed 
-                phat = phat_H1;
-                loglik = loglik_H1;
-            elif alpha==1 : # dependence of shape on T is never allowed 
-                phat = phat_H0shape;
-                loglik = loglik_H0shape;
-            elif pval<=alpha : # depends on stat. significance
-                phat = phat_H1;
-                loglik = loglik_H1;
+
+            if alpha == 0:  # dependence of shape on T is always allowed
+                phat = phat_H1
+                loglik = loglik_H1
+            elif alpha == 1:  # dependence of shape on T is never allowed
+                phat = phat_H0shape
+                loglik = loglik_H0shape
+            elif pval <= alpha:  # depends on stat. significance
+                phat = phat_H1
+                loglik = loglik_H1
             else:
-                phat = phat_H0shape;
-                loglik = loglik_H0shape;
-            
-
-
+                phat = phat_H0shape
+                loglik = loglik_H0shape
 
         else:
-            min_phat_H1 = minimize(lambda theta: -wbl_leftcensor_loglik(theta, P, T, thr), 
-                                   init_g, 
-                                   method='Nelder-Mead')
+            min_phat_H1 = minimize(
+                lambda theta: -wbl_leftcensor_loglik(
+                    theta, T0, P1, T1, thr
+                ),
+                init_g,
+                method=minimize_method)
             phat_H1 = min_phat_H1.x
 
+            init_H0shape = np.array([phat_H1[0], 0, phat_H1[2], phat_H1[3]])
+            min_phat_H0shape = minimize(
+                lambda theta: -wbl_leftcensor_loglik_H0shape(
+                    theta, T0, P1, T1, thr
+                ),
+                init_H0shape,
+                method=minimize_method,
+                bounds=bounds,
+                options=h0_options)
 
-            
-            min_phat_H0shape = minimize(lambda theta: -wbl_leftcensor_loglik_H0shape(theta, P, T, thr), 
-                                   init_g, 
-                                   method='Nelder-Mead',
-                                   options={'xatol': 1e-8, 'fatol': 1e-8, 'maxiter': 1000})
-            
             phat_H0shape = min_phat_H0shape.x
             phat_H0shape[1] = 0
-            
-            loglik_H1 = wbl_leftcensor_loglik(phat_H1,P,T,thr)
-            loglik_H0shape = wbl_leftcensor_loglik_H0shape(phat_H0shape,P,T,thr)
-            lambda_LR_shape = -2*( loglik_H0shape - loglik_H1 )
+
+            loglik_H1 = wbl_leftcensor_loglik(
+                phat_H1, T0, P1, T1, thr
+            )
+            loglik_H0shape = wbl_leftcensor_loglik_H0shape(
+                phat_H0shape, T0, P1, T1, thr
+            )
+            lambda_LR_shape = -2*(loglik_H0shape - loglik_H1)
             pval = chi2.sf(lambda_LR_shape, df=1)
-            
-            
-            if alpha==0 : # dependence of shape on T is always allowed 
-                phat = phat_H1;
-                loglik = loglik_H1;
-            elif alpha==1 : # dependence of shape on T is never allowed 
-                phat = phat_H0shape;
-                loglik = loglik_H0shape;
-            elif pval<=alpha : # depends on stat. significance
-                phat = phat_H1;
-                loglik = loglik_H1;
+
+            if alpha == 0:  # dependence of shape on T is always allowed
+                phat = phat_H1
+                loglik = loglik_H1
+            elif alpha == 1:  # dependence of shape on T is never allowed
+                phat = phat_H0shape
+                loglik = loglik_H0shape
+            elif pval <= alpha:  # depends on stat. significance
+                phat = phat_H1
+                loglik = loglik_H1
             else:
-                phat = phat_H0shape;
-                loglik = loglik_H0shape;
-                
+                phat = phat_H0shape
+                loglik = loglik_H0shape
+
         return phat, loglik, loglik_H1, loglik_H0shape
-    
-    def temperature_model(self, data_oe_temp, beta=0, method="norm"):
-        """
-        Fits the temperature data to the TENAX temperature model.
+
+    def temperature_model(
+        self,
+        data_oe_temp,
+        beta=0,
+        method="norm"
+    ):
+        """Fit temperature data to the TENAX temperature model.
 
         Parameters
         ----------
-        data_oe_temp : numpy.ndarray
+        data_oe_temp : np.ndarray
             Temperature data.
         beta : float, optional
-            beta of the generalised normal distribution. if not defined, uses the beta defined in S. The default is 4.
-        method : string, optional
-            Type of fit. "norm" is for the generalised normal distribution. "skewnorm" is for a skewed normal distribution. The default is "norm".
+            Shape parameter of the generalised normal distribution. If 0,
+            uses ``self.beta``. Defaults to 0.
+        method : str, optional
+            Distribution to fit. ``"norm"`` uses the generalised normal;
+            ``"skewnorm"`` uses a skewed normal. Defaults to ``"norm"``.
 
         Returns
         -------
-        g_phat (np.array): parameters of the temperature distribution. 
-                           if "norm", [shape,scale]. 
-                           if "skewnorm", [alpha,loc,scale] alpha controls skewness, loc is mean, scale is std
-
+        g_phat : np.ndarray
+            Fitted parameters. ``[mu, sigma]`` for ``"norm"``;
+            ``[alpha, loc, scale]`` for ``"skewnorm"``.
         """
         if beta == 0:
             beta = self.beta
@@ -696,7 +869,9 @@ class TENAX:
             def skewnorm_pdf(x, alpha, loc, scale):
                 return skewnorm.pdf(x, alpha, loc=loc, scale=scale)
 
-            hist, bin_edges = np.histogram(data_oe_temp, bins=100, density=True)
+            hist, bin_edges = np.histogram(
+                data_oe_temp, bins=100, density=True
+                )
             # Bin centers for xdata
             xdata = (bin_edges[:-1] + bin_edges[1:]) / 2
             initial_guess = [
@@ -726,7 +901,7 @@ class TENAX:
         gen_RL=True,
         temp_method="norm",
         method_root_scalar="brentq",
-        b_exp = False
+        b_exp=False
     ):
         """
         Inversion of the TENAX model to predict return levels or plot model.
@@ -742,7 +917,8 @@ class TENAX:
         Ts : numpy.ndarray
             Array of T values to use in the Monte Carlo.
         gen_P_mc : bool, optional
-            Specify whether to generate Monte Carlo values for precipitation. The default is False.
+            Specify whether to generate Monte Carlo values for precipitation.
+            The default is False.
         gen_RL : bool, optional
             Specify whether to generate return levels. The default is True.
         temp_method : str, optional
@@ -754,13 +930,15 @@ class TENAX:
 
         Returns
         -------
-        ret_lev : list 
-            Return levels at periods specified in self.return_period.
-        T_mc : numpy.ndarray
-            Monte Carlo generated temperature values.
-        P_mc : numpy.ndarray
-            Monte Carlo generated precipitation values.
-
+        ret_lev : np.ndarray or list
+            Return levels at periods specified in ``self.return_period``.
+            Empty list ``[]`` if ``gen_RL=False``.
+        T_mc : np.ndarray
+            Monte Carlo generated temperature values, shape
+            ``(n_monte_carlo, 1)``.
+        P_mc : np.ndarray or list
+            Monte Carlo generated precipitation values. Empty list ``[]``
+            if ``gen_P_mc=False``.
         """
 
         P_mc = []
@@ -780,16 +958,18 @@ class TENAX:
 
         # Generates random P according to the magnitude model
         if b_exp:
+            # exponential model for b
             wbl_phat = np.column_stack((
                                         F_phat[2] * np.exp(F_phat[3] * T_mc),
                                         F_phat[0] * np.exp(F_phat[1] * T_mc)
-                                        )) #exponential model for b
+                                        ))
 
         else:
+            # linear model for b
             wbl_phat = np.column_stack((
                                         F_phat[2] * np.exp(F_phat[3] * T_mc),
                                         F_phat[0] + F_phat[1] * T_mc
-                                        )) #linear model for b
+                                        ))
         # old vguess
         # vguess = 10 ** np.arange(np.log10(F_phat[2]), np.log10(5e2), 0.05
         # test new vguess
@@ -822,30 +1002,75 @@ class TENAX:
 
         return ret_lev, T_mc, P_mc
 
-
     def TNX_tenax_bootstrap_uncertainty(
-        self, P, T, blocks_id, Ts, temp_method="norm", method_root_scalar="brentq"
+        self,
+        P,
+        T,
+        blocks_id,
+        Ts,
+        temp_method="norm",
+        method_root_scalar="brentq",
+        minimize_method="Nelder-Mead",
+        parallel=False,
+        n_jobs=-1,
     ):
-        """
-        Bootstrap uncertainty estimation for the TENAX model.
+        """Bootstrap uncertainty estimation for the TENAX model.
 
-        Parameters:
-        - P: numpy array of precipitation data.
-        - T: numpy array of temperature data.
-        - blocks_id: numpy array of block identifiers (e.g., years).
-        - perc_thres: percentile threshold for left-censoring.
-        - S: object containing model parameters and methods.
-        - RP: return periods (numpy array).
-        - N: number of Monte Carlo simulations.
-        - Ts: time scales (numpy array).
-        - niter: number of bootstrap iterations.
+        Parameters
+        ----------
+        P : np.ndarray
+            Precipitation ordinary events data.
+        T : np.ndarray
+            Temperature ordinary events data.
+        blocks_id : np.ndarray
+            Block identifiers (e.g., years) for each event.
+        Ts : np.ndarray
+            Array of temperature values for the Monte Carlo integration.
+        temp_method : str, optional
+            Distribution used for the temperature model. Defaults to
+            ``"norm"``.
+        method_root_scalar : str, optional
+            Root-finding method for model inversion. Defaults to
+            ``"brentq"``.
+        minimize_method : str, optional
+            Optimisation method passed to ``magnitude_model``. Defaults to
+            ``"Nelder-Mead"``.
+        parallel : bool, optional
+            Run bootstrap iterations in parallel using
+            ``ProcessPoolExecutor``. Warm start is disabled when
+            ``parallel=True`` because iterations run in separate processes
+            and cannot share state. Defaults to ``False``.
+        n_jobs : int, optional
+            Number of worker processes. ``-1`` uses all available cores.
+            Ignored when ``parallel=False``. Defaults to ``-1``.
 
-        Returns:
-        - F_phat_unc: array of magnitude model parameters from bootstrap samples.
-        - g_phat_unc: array of temperature model parameters from bootstrap samples.
-        - RL_unc: array of estimated return levels from bootstrap samples.
-        - n_unc: array of mean number of events per block from bootstrap samples.
-        - n_err: number of iterations where the model fitting failed.
+        Notes
+        -----
+        **Warm start (sequential mode only):** each iteration reuses the
+        fitted parameters from the previous iteration as the initial guess
+        for ``magnitude_model``. Since consecutive bootstrap samples are
+        drawn from the same dataset, their optimal parameters are typically
+        close to each other, so the optimiser converges in fewer steps.
+        ``self.init_param_guess`` is restored to its original value after
+        the loop so that subsequent calls are not affected.
+
+        Returns
+        -------
+        F_phat_unc : np.ndarray
+            Magnitude model parameters from each bootstrap sample,
+            shape ``(niter, 4)``.
+        g_phat_unc : np.ndarray
+            Temperature model parameters from each bootstrap sample,
+            shape ``(niter, 2)`` for ``"norm"`` or ``(niter, 3)`` for
+            ``"skewnorm"``.
+        RL_unc : np.ndarray
+            Return levels from each bootstrap sample,
+            shape ``(niter, len(return_period))``.
+        n_unc : np.ndarray
+            Mean number of events per block from each bootstrap sample,
+            shape ``(niter,)``.
+        n_err : int
+            Number of iterations where model fitting failed.
         """
 
         perc_thres = self.left_censoring[1]
@@ -868,354 +1093,420 @@ class TENAX:
         n_unc = np.full(niter, np.nan)
         n_err = 0
 
-        # Random sampling iterations
-        for ii in range(niter):
-            Pr = []
-            Tr = []
-            Bid = []
+        if parallel:
+            args_list = [
+                (P, T, blocks_id, blocks, randy[:, ii], M, perc_thres, Ts,
+                 temp_method, method_root_scalar, minimize_method, self)
+                for ii in range(niter)
+            ]
+            results = Parallel(n_jobs=n_jobs)(
+                delayed(_bootstrap_single_iteration)(args)
+                for args in args_list
+            )
 
-            # Create bootstrapped data sample and corresponding 'fake' blocks id
-            for iy in range(M):
-                selected = blocks_id == blocks[randy[iy, ii]]
-                Pr.append(P[selected])
-                Tr.append(T[selected])
-                Bid.append(
-                    np.full(np.sum(selected), iy + 1)
-                )  # MATLAB indexing starts at 1
+            for ii, (F_tmp, g_tmp, RL_tmp, n_tmp, err) in enumerate(results):
+                if err == 0:
+                    F_phat_unc[ii, :] = F_tmp
+                    g_phat_unc[ii, :] = g_tmp
+                    RL_unc[ii, :] = RL_tmp
+                    n_unc[ii] = n_tmp
+                n_err += err
 
-            # Concatenate the resampled data
-            Pr = np.concatenate(Pr)
-            Tr = np.concatenate(Tr)
-            Bid = np.concatenate(Bid)
+        else:
+            # updated after each successful magnitude_model fit
+            _warm_start = None
 
-            try:
-                # Left-censoring threshold
-                thr = np.quantile(Pr, perc_thres)
+            # restore after loop
+            _init_param_guess_orig = self.init_param_guess
 
-                # TENAX model components
-                # Magnitude model
-                F_phat_temporary, loglik_temp, _, _ = self.magnitude_model(Pr, Tr, thr)
-                # Temperature model
-                g_phat_temporary = self.temperature_model(Tr, method=temp_method)
-                # Mean number of events per block
-                n_temporary = len(Pr) / M
-                # Estimate return levels using Monte Carlo samples
-                # TODO: check this cause it is slow...
-                RL_temporary, _, _ = self.model_inversion(
-                    F_phat_temporary,
-                    g_phat_temporary,
-                    n_temporary,
-                    Ts,
-                    temp_method=temp_method,
-                    method_root_scalar=method_root_scalar,
-                )
+            _t_resample = 0.0
+            _t_magnitude = 0.0
+            _t_temperature = 0.0
+            _t_inversion = 0.0
 
-                # Store results
-                F_phat_unc[ii, :] = F_phat_temporary
-                g_phat_unc[ii, :] = g_phat_temporary
-                RL_unc[ii, :] = RL_temporary
-                n_unc[ii] = n_temporary
-            except Exception:
-                n_err += 1
+            for ii in range(niter):
+                Pr, Tr, Bid = [], [], []
+
+                _t0 = time.perf_counter()
+                for iy in range(M):
+                    selected = blocks_id == blocks[randy[iy, ii]]
+                    Pr.append(P[selected])
+                    Tr.append(T[selected])
+                    Bid.append(np.full(np.sum(selected), iy + 1))
+
+                Pr = np.concatenate(Pr)
+                Tr = np.concatenate(Tr)
+                _t_resample += time.perf_counter() - _t0
+
+                try:
+                    thr = np.quantile(Pr, perc_thres)
+
+                    _t0 = time.perf_counter()
+                    if _warm_start is not None:
+                        self.init_param_guess = _warm_start
+                    F_phat_temporary, _, _, _ = self.magnitude_model(
+                        Pr, Tr, thr, minimize_method=minimize_method
+                    )
+                    _t_magnitude += time.perf_counter() - _t0
+                    _warm_start = F_phat_temporary
+
+                    _t0 = time.perf_counter()
+                    g_phat_temporary = self.temperature_model(
+                        Tr,
+                        method=temp_method
+                        )
+                    _t_temperature += time.perf_counter() - _t0
+
+                    n_temporary = len(Pr) / M
+
+                    _t0 = time.perf_counter()
+                    RL_temporary, _, _ = self.model_inversion(
+                        F_phat_temporary, g_phat_temporary, n_temporary, Ts,
+                        temp_method=temp_method,
+                        method_root_scalar=method_root_scalar,
+                    )
+                    _t_inversion += time.perf_counter() - _t0
+
+                    F_phat_unc[ii, :] = F_phat_temporary
+                    g_phat_unc[ii, :] = g_phat_temporary
+                    RL_unc[ii, :] = RL_temporary
+                    n_unc[ii] = n_temporary
+                except Exception:
+                    n_err += 1
+
+            print("\n--- bootstrap_uncertainty internal timings ---")
+            for label, elapsed in [
+                ("resample", _t_resample),
+                ("magnitude_model", _t_magnitude),
+                ("temperature_model", _t_temperature),
+                ("model_inversion", _t_inversion),
+            ]:
+                print(f"  {label:<20} {elapsed:7.3f} s")
+
+            self.init_param_guess = _init_param_guess_orig
 
         return F_phat_unc, g_phat_unc, RL_unc, n_unc, n_err
 
-def wbl_leftcensor_loglik(theta, x, t, thr):
-    """
-    Computes the log-likelihood for a left-censored Weibull distribution with temperature-dependent parameters.
-    
-    This function models precipitation using a Weibull distribution (tail model), where the shape and scale parameters depend on temperature.
-    Observations of precipitation below the threshold are left-censored, meaning their exact values are unknown.
+
+def _bootstrap_single_iteration(args):
+    """One bootstrap iteration, designed for ProcessPoolExecutor."""
+    (P, T, blocks_id, blocks, randy_ii, M, perc_thres, Ts,
+     temp_method, method_root_scalar, minimize_method, S) = args
+
+    Pr, Tr = [], []
+    for iy in range(M):
+        selected = blocks_id == blocks[randy_ii[iy]]
+        Pr.append(P[selected])
+        Tr.append(T[selected])
+    Pr = np.concatenate(Pr)
+    Tr = np.concatenate(Tr)
+
+    try:
+        thr = np.quantile(Pr, perc_thres)
+        F_phat_tmp, _, _, _ = S.magnitude_model(
+            Pr,
+            Tr,
+            thr,
+            minimize_method=minimize_method
+        )
+        g_phat_tmp = S.temperature_model(Tr, method=temp_method)
+        n_tmp = len(Pr) / M
+        RL_tmp, _, _ = S.model_inversion(
+            F_phat_tmp, g_phat_tmp, n_tmp, Ts,
+            temp_method=temp_method,
+            method_root_scalar=method_root_scalar,
+        )
+        return F_phat_tmp, np.array(g_phat_tmp), RL_tmp, n_tmp, 0
+    except Exception:
+        nan_g = np.full(2 if temp_method == "norm" else 3, np.nan)
+        nan_rl = np.full(len(S.return_period), np.nan)
+        return np.full(4, np.nan), nan_g, nan_rl, np.nan, 1
+
+
+def wbl_leftcensor_loglik(
+    theta,
+    t0,
+    x1,
+    t1,
+    thr
+):
+    """Compute log-likelihood for a left-censored Weibull distribution.
+
+    Shape and scale parameters depend linearly on temperature. Observations
+    below the threshold are left-censored.
 
     Parameters
     ----------
-    theta : float
-        initial guess for fit.
-    x : numpy.ndarray
-        precipitation values.
-    t : numpy.ndarray
-        temperature values.
+    theta : array-like
+        Parameter vector ``[kappa_0, b, lambda_0, a]``.
+    t0 : np.ndarray
+        Temperature values for censored events (precipitation below ``thr``).
+    x1 : np.ndarray
+        Precipitation values at or above ``thr``.
+    t1 : np.ndarray
+        Temperature values corresponding to ``x1``.
     thr : float
-        threshold value for left-censoring.
+        Left-censoring threshold.
 
     Returns
     -------
-    loglik : TYPE
-        DESCRIPTION.
-
+    float
+        Log-likelihood value.
     """
-    # theta is init guess
-    # x is precipitaon\
-    # t is temperature
-    # thr is threshold value (exact, no percentual)
-    a_w = theta[0]
-    b_w = theta[1]
-    a_C = theta[2]
-    b_C = theta[3]
-
-    # Apply conditions based on the threshold
-    t0 = t[x < thr]
+    a_w, b_w, a_C, b_C = theta
     shapes0 = a_w + b_w * t0
-    scales0 = a_C * np.exp(b_C * t0)
-
-    x1 = x[x >= thr]
-    t1 = t[x >= thr]
+    scales0 = a_C * np.exp(np.minimum(b_C * t0, 709.0))
     shapes1 = a_w + b_w * t1
-    scales1 = a_C * np.exp(b_C * t1)
-
-    # Calculate the log-likelihood components
-    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
-    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
-
-    # Sum the components for the final log-likelihood
-    loglik = loglik1 + loglik2
-
-    return loglik
+    scales1 = a_C * np.exp(np.minimum(b_C * t1, 709.0))
+    return (
+        np.sum(_wbl_logcdf(shapes0, scales0, thr))
+        + np.sum(_wbl_logpdf(x1, shapes1, scales1))
+    )
 
 
-def wbl_leftcensor_loglik_H0shape(theta, x, t, thr):
-    """
-    Computes the log-likelihood for a left-censored Weibull distribution with temperature-dependent parameters, 
-    where the b parameter of the Weibull shape parameter is not used (meaning b=0).
-    
-    This function models precipitation using a Weibull distribution (tail model), where the shape and scale parameters depend on temperature.
-    Observations of precipitation below the threshold are left-censored, meaning their exact values are unknown.
+def wbl_leftcensor_loglik_H0shape(
+    theta,
+    t0,
+    x1,
+    t1,
+    thr
+):
+    """Compute log-likelihood for a left-censored Weibull
+    with constant shape (H0).
+
+    Same as `wbl_leftcensor_loglik` but with ``b=0``, i.e. shape does not
+    depend on temperature. Used as the null hypothesis in the likelihood-ratio
+    test.
 
     Parameters
     ----------
-    theta : float
-        initial guess for fit.
-    x : numpy.ndarray
-        precipitation values.
-    t : numpy.ndarray
-        temperature values.
+    theta : array-like
+        Parameter vector ``[kappa_0, b, lambda_0, a]`` (``b`` is ignored).
+    t0 : np.ndarray
+        Temperature values for censored events (precipitation below ``thr``).
+    x1 : np.ndarray
+        Precipitation values at or above ``thr``.
+    t1 : np.ndarray
+        Temperature values corresponding to ``x1``.
     thr : float
-        threshold value for left-censoring.
+        Left-censoring threshold.
 
     Returns
     -------
-    loglik : TYPE
-        DESCRIPTION.
-
+    float
+        Log-likelihood value.
     """
-    # theta is init guess
-    # x is precipitaon\
-    # t is temperature
-    # thr is threshold value (exact, no percentual)
-
-    a_w = theta[0]  # Shape parameter (constant) - lambda_0
-    a_C = theta[2]  # Scale parameter base (a)
-    b_C = theta[3]  # Scale parameter adjustment based on `t` - k_0
-
-    # Handle data below the threshold
-    t0 = t[x < thr]
-    shapes0 = a_w * np.ones_like(t0)  # Constant shape parameter
-    scales0 = a_C * np.exp(b_C * t0)
-
-    # Handle data above or equal to the threshold
-    x1 = x[x >= thr]
-    t1 = t[x >= thr]
-    shapes1 = a_w * np.ones_like(t1)  # Constant shape parameter
-    scales1 = a_C * np.exp(b_C * t1)
-
-    # Calculate the log-likelihood components
-    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
-    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
-
-    # Sum the components for the final log-likelihood
-    loglik = loglik1 + loglik2
-
-    return loglik
+    a_w, _, a_C, b_C = theta
+    scales0 = a_C * np.exp(np.minimum(b_C * t0, 709.0))
+    scales1 = a_C * np.exp(np.minimum(b_C * t1, 709.0))
+    return (
+        np.sum(_wbl_logcdf(a_w, scales0, thr))
+        + np.sum(_wbl_logpdf(x1, a_w, scales1))
+    )
 
 
-def wbl_leftcensor_loglik_bset(theta, x, t, thr, b_set):
-    """
-    Computes the log-likelihood for a left-censored Weibull distribution with temperature-dependent parameters, 
-    where the b parameter of the Weibull shape parameter is set by the user.
-    
-    This function models precipitation using a Weibull distribution (tail model), where the shape and scale parameters depend on temperature.
-    Observations of precipitation below the threshold are left-censored, meaning their exact values are unknown.
-    
+def wbl_leftcensor_loglik_bset(theta, t0, x1, t1, thr, b_set):
+    """Compute log-likelihood for a left-censored Weibull with fixed b.
+
+    Same as `wbl_leftcensor_loglik` but ``b`` is fixed to ``b_set`` and not
+    optimised.
+
     Parameters
     ----------
-    theta : float
-        initial guess for fit.
-    x : numpy.ndarray
-        precipitation values.
-    t : numpy.ndarray
-        temperature values.
+    theta : array-like
+        Parameter vector ``[kappa_0, b, lambda_0, a]`` (``b`` is overridden
+        by ``b_set``).
+    t0 : np.ndarray
+        Temperature values for censored events (precipitation below ``thr``).
+    x1 : np.ndarray
+        Precipitation values at or above ``thr``.
+    t1 : np.ndarray
+        Temperature values corresponding to ``x1``.
     thr : float
-        threshold value for left-censoring.
+        Left-censoring threshold.
     b_set : float
-        chosen b value that will not change
+        Fixed value of ``b`` (shape temperature-dependence parameter).
 
     Returns
     -------
-    loglik : TYPE
-        DESCRIPTION.
-
+    float
+        Log-likelihood value.
     """
-    # theta is init guess
-    # x is precipitaon\
-    # t is temperature
-    # thr is threshold value (exact, no percentual)
-    a_w = theta[0]
+    a_w, _, a_C, b_C = theta
     b_w = b_set
-    a_C = theta[2]
-    b_C = theta[3]
-
-    # Apply conditions based on the threshold
-    t0 = t[x < thr]
     shapes0 = a_w + b_w * t0
-    scales0 = a_C * np.exp(b_C * t0)
-
-    x1 = x[x >= thr]
-    t1 = t[x >= thr]
+    scales0 = a_C * np.exp(np.minimum(b_C * t0, 709.0))
     shapes1 = a_w + b_w * t1
-    scales1 = a_C * np.exp(b_C * t1)
-
-    # Calculate the log-likelihood components
-    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
-    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
-
-    # Sum the components for the final log-likelihood
-    loglik = loglik1 + loglik2
-
-    return loglik
-
-def wbl_leftcensor_loglik_exp(theta, x, t, thr):
-    """
-    TODO: I dont understand these things
-
-    Parameters
-    ----------
-    theta : float
-        initial guess for fit.
-    x : numpy.ndarray
-        precipitation values.
-    t : numpy.ndarray
-        temperature values.
-    thr : float
-        threshold value for left-censoring.
-
-    Returns
-    -------
-    loglik : TYPE
-        DESCRIPTION.
-
-    """
-    #theta is init guess
-    # x is precipitaon\
-    # t is temperature
-    # thr is threshold value (exact, no percentual)
-    a_w = theta[0]
-    b_w = theta[1]
-    a_C = theta[2]
-    b_C = theta[3]
-
-    # Apply conditions based on the threshold
-    t0 = t[x < thr]
-    shapes0 = a_w * np.exp(b_w * t0)
-    scales0 = a_C * np.exp(b_C * t0)
-    
-    x1 = x[x >= thr]
-    t1 = t[x >= thr]
-    shapes1 = a_w * np.exp(b_w * t1)
-    scales1 = a_C * np.exp(b_C * t1)
-
-    # Calculate the log-likelihood components
-    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
-    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
-
-    # Sum the components for the final log-likelihood
-    loglik = loglik1 + loglik2
-
-    return loglik
+    scales1 = a_C * np.exp(np.minimum(b_C * t1, 709.0))
+    return (
+        np.sum(_wbl_logcdf(shapes0, scales0, thr))
+        + np.sum(_wbl_logpdf(x1, shapes1, scales1))
+    )
 
 
-def wbl_leftcensor_loglik_bset_bexp(theta, x, t, thr, b_set):
-    """
-    TODO: I dont understand these things
+def wbl_leftcensor_loglik_exp(
+    theta,
+    t0,
+    x1,
+    t1,
+    thr
+):
+    """Compute log-likelihood for a left-censored Weibull
+    with exponential shape.
+
+    Like `wbl_leftcensor_loglik` but shape depends exponentially on
+    temperature: ``shape = kappa_0 * exp(b * T)``.
 
     Parameters
     ----------
-    theta : float
-        initial guess for fit.
-    x : numpy.ndarray
-        precipitation values.
-    t : numpy.ndarray
-        temperature values.
+    theta : array-like
+        Parameter vector ``[kappa_0, b, lambda_0, a]``.
+    t0 : np.ndarray
+        Temperature values for censored events (precipitation below ``thr``).
+    x1 : np.ndarray
+        Precipitation values at or above ``thr``.
+    t1 : np.ndarray
+        Temperature values corresponding to ``x1``.
     thr : float
-        threshold value for left-censoring.
+        Left-censoring threshold.
 
     Returns
     -------
-    loglik : TYPE
-        DESCRIPTION.
-
+    float
+        Log-likelihood value.
     """
-    #theta is init guess
-    # x is precipitaon\
-    # t is temperature
-    # thr is threshold value (exact, no percentual)
-    a_w = theta[0]
+    a_w, b_w, a_C, b_C = theta
+    shapes0 = a_w * np.exp(np.minimum(b_w * t0, 709.0))
+    scales0 = a_C * np.exp(np.minimum(b_C * t0, 709.0))
+    shapes1 = a_w * np.exp(np.minimum(b_w * t1, 709.0))
+    scales1 = a_C * np.exp(np.minimum(b_C * t1, 709.0))
+    return (
+        np.sum(_wbl_logcdf(shapes0, scales0, thr))
+        + np.sum(_wbl_logpdf(x1, shapes1, scales1))
+    )
+
+
+def wbl_leftcensor_loglik_bset_bexp(
+    theta,
+    t0,
+    x1,
+    t1,
+    thr,
+    b_set
+):
+    """Compute log-likelihood for a left-censored Weibull
+    with exponential shape, fixed b.
+
+    Combines `wbl_leftcensor_loglik_exp` and `wbl_leftcensor_loglik_bset`:
+    shape depends exponentially on temperature and ``b`` is fixed to
+    ``b_set``.
+
+    Parameters
+    ----------
+    theta : array-like
+        Parameter vector ``[kappa_0, b, lambda_0, a]`` (``b`` is overridden
+        by ``b_set``).
+    t0 : np.ndarray
+        Temperature values for censored events (precipitation below ``thr``).
+    x1 : np.ndarray
+        Precipitation values at or above ``thr``.
+    t1 : np.ndarray
+        Temperature values corresponding to ``x1``.
+    thr : float
+        Left-censoring threshold.
+    b_set : float
+        Fixed value of ``b``.
+
+    Returns
+    -------
+    float
+        Log-likelihood value.
+    """
+    a_w, _, a_C, b_C = theta
     b_w = b_set
-    a_C = theta[2]
-    b_C = theta[3]
-
-    # Apply conditions based on the threshold
-    t0 = t[x < thr]
-    shapes0 = a_w * np.exp(b_w * t0)
-    scales0 = a_C * np.exp(b_C * t0)
-    
-    x1 = x[x >= thr]
-    t1 = t[x >= thr]
-    shapes1 = a_w * np.exp(b_w * t1)
-    scales1 = a_C * np.exp(b_C * t1)
-
-    # Calculate the log-likelihood components
-    loglik1 = np.sum(np.log(weibull_min.cdf(thr, c=shapes0, scale=scales0)))
-    loglik2 = np.sum(np.log(weibull_min.pdf(x1, c=shapes1, scale=scales1)))
-
-    # Sum the components for the final log-likelihood
-    loglik = loglik1 + loglik2
-
-    return loglik
+    shapes0 = a_w * np.exp(np.minimum(b_w * t0, 709.0))
+    scales0 = a_C * np.exp(np.minimum(b_C * t0, 709.0))
+    shapes1 = a_w * np.exp(np.minimum(b_w * t1, 709.0))
+    scales1 = a_C * np.exp(np.minimum(b_C * t1, 709.0))
+    return (
+        np.sum(_wbl_logcdf(shapes0, scales0, thr))
+        + np.sum(_wbl_logpdf(x1, shapes1, scales1))
+    )
 
 
-def gen_norm_pdf(x: np.ndarray, mu: float, sigma: float, beta: float) -> np.ndarray:
-    """
-    Function computing the Generalized normal distribution PDF.
+def _wbl_logcdf(shapes, scales, thr):
+    """log(CDF) of Weibull at thr: log(1 - exp(-(thr/scale)^shape))."""
+    shapes = np.maximum(shapes, 1e-300)
+    scales = np.maximum(scales, 1e-300)
+    log_z = shapes * np.log(np.maximum(thr / scales, 1e-300))
+    z = np.exp(np.minimum(log_z, 709.0))
+    z = np.maximum(z, 1e-300)
+    return np.log(-np.expm1(-z))
+
+
+def _wbl_logpdf(x, shapes, scales):
+    """log(PDF) of Weibull: log(c/scale) + (c-1)*log(x/scale) - (x/scale)^c."""
+    shapes = np.maximum(shapes, 1e-300)
+    scales = np.maximum(scales, 1e-300)
+    z = np.maximum(x / scales, 1e-300)
+    log_z = np.log(z)
+    return np.maximum(
+        np.log(shapes) - np.log(scales)
+        + np.minimum((shapes - 1) * log_z, 709.0)
+        - np.exp(np.minimum(shapes * log_z, 709.0)),
+        -709.0
+    )
+
+
+def gen_norm_pdf(
+    x: np.ndarray,
+    mu: float,
+    sigma: float,
+    beta: float
+) -> np.ndarray:
+    """Compute the Generalized normal distribution PDF.
 
     Parameters
     ----------
-        x (np.ndarray): Data points.
-        mu (float): Location parameter.
-        sigma (float): Scale parameter.
-        beta (float): Snape parameter.
+    x : np.ndarray
+        Data points.
+    mu : float
+        Location parameter.
+    sigma : float
+        Scale parameter.
+    beta : float
+        Shape parameter.
 
     Returns
     -------
-        np.ndarray: Generalized normal distribution PDF
+    np.ndarray
+        Generalized normal distribution PDF values.
     """
     coeff = beta / (2 * sigma * gamma(1 / beta))
     exponent = -((np.abs(x - mu) / sigma) ** beta)
     return coeff * np.exp(exponent)
 
 
-def gen_norm_loglik(x: np.ndarray, par: list, beta: float) -> np.ndarray:
-    """
-    Function computing the Log-likelihood for the Generalized normal distribution.
+def gen_norm_loglik(
+    x: np.ndarray,
+    par: list,
+    beta: float
+) -> float:
+    """Compute the log-likelihood for the Generalized normal distribution.
 
     Parameters
     ----------
-        x (np.ndarray): Data points.
-        par (list): List of parameters [mu, sigma].
-        beta (float): Snape parameter.
+    x : np.ndarray
+        Data points.
+    par : list
+        Parameters ``[mu, sigma]``.
+    beta : float
+        Shape parameter.
 
     Returns
     -------
-        np.ndarray: Log-likelihood for the Generalized normal distribution.
+    float
+        Log-likelihood value.
     """
     # Compute the log-likelihood
     pdf = gen_norm_pdf(x, par[0], par[1], beta)
@@ -1229,25 +1520,30 @@ def gen_norm_loglik(x: np.ndarray, par: list, beta: float) -> np.ndarray:
     return loglik
 
 
-def randdf(size, df, flag):
-    """
-    This function generates random numbers according to a user-defined probability
-    density function (pdf) or cumulative distribution function (cdf).
-    This is pythonized version of Matlab f randdf coded by halleyhit on Aug. 15th, 2018
-    % Email: halleyhit@sjtu.edu.cn or halleyhit@163.com
+def randdf(
+    size,
+    df,
+    flag
+):
+    """Generate random numbers from a user-defined PDF or CDF.
+
+    Pythonised version of MATLAB's randdf coded by halleyhit on Aug. 15th,
+    2018. Email: halleyhit@sjtu.edu.cn or halleyhit@163.com
 
     Parameters
     ----------
-    size (int or tuple): Size of the output array. E.g., size=10 creates a 10-by-1 array,
-                         size=(10, 2) creates a 10-by-2 matrix.
-    df (numpy.ndarray): Density function, should be a 2-row matrix where the first row
-                        represents the function values and the second row represents
-                        sampling points.
-    flag (str): Flag to indicate 'pdf' or 'cdf'.
+    size : int or tuple
+        Output size. ``10`` → 1-D array of 10; ``(10, 2)`` → 10×2 matrix.
+    df : np.ndarray
+        2-row matrix: first row is function values (PDF or CDF), second row
+        is the corresponding sampling points.
+    flag : str
+        ``"pdf"`` or ``"cdf"``.
 
     Returns
     -------
-    numpy.ndarray: Array of random samples based on the defined pdf or cdf.
+    np.ndarray
+        Random samples drawn according to the defined distribution.
     """
 
     # Determine output dimensions
@@ -1295,17 +1591,27 @@ def randdf(size, df, flag):
 
     return result.reshape((n, m))
 
-def MC_tSMEV_cdf(y, wbl_phat, n):
-    """
-    Vectorized version of the Monte Carlo SMEV CDF evaluation.
-    
-    Parameters:
-    y (float or array-like): Value(s) at which to evaluate the CDF.
-    wbl_phat (numpy.ndarray): Array of Weibull parameters (N x 2) for [scale, shape].
-    n (float): Power to raise the average probability.
-    
-    Returns:
-    float or ndarray: CDF value(s) for input y.
+
+def MC_tSMEV_cdf(
+    y,
+    wbl_phat,
+    n
+):
+    """Evaluate the Monte Carlo SMEV CDF at given values.
+
+    Parameters
+    ----------
+    y : float or array-like
+        Value(s) at which to evaluate the CDF.
+    wbl_phat : np.ndarray
+        Weibull parameters, shape ``(N, 2)``: columns are ``[scale, shape]``.
+    n : float
+        Power applied to the average probability.
+
+    Returns
+    -------
+    np.ndarray
+        CDF value(s) for input ``y``.
     """
     y = np.atleast_1d(y)  # Ensure y is array
     scale = wbl_phat[:, 0]
@@ -1322,24 +1628,40 @@ def MC_tSMEV_cdf(y, wbl_phat, n):
     return p_avg ** n
 
 
-def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess, method_root_scalar):
+def SMEV_Mc_inversion(
+    wbl_phat,
+    n,
+    target_return_periods,
+    vguess,
+    method_root_scalar
+):
+    """Invert the MC-SMEV CDF to find quantiles for target return periods.
+
+    Parameters
+    ----------
+    wbl_phat : np.ndarray
+        Weibull parameters, shape ``(N, 2)``: columns are ``[scale, shape]``.
+    n : float
+        Power applied to the average probability.
+    target_return_periods : list or array-like
+        Desired return periods.
+    vguess : np.ndarray
+        Initial value grid for root-finding.
+    method_root_scalar : str
+        Root-finding method passed to ``scipy.optimize.root_scalar``.
+
+    Returns
+    -------
+    np.ndarray
+        Quantiles corresponding to each target return period.
     """
-    Invert to find quantiles corresponding to the target return periods.
-    
-    Parameters:
-    wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
-    n (int): Power to raise the final probability to.
-    target_return_periods (list or array-like): Desired target return periods.
-    vguess (numpy.ndarray): Initial guesses for inversion.
-    
-    Returns:
-    numpy.ndarray: Quantiles corresponding to the target return periods.
-    """
-    if not isinstance(n, float): #if n is numpy or panda series, this should give u just float
-        n = float(n.values[0]) 
+
+    # if n is numpy or panda series, this should give u just float
+    if not isinstance(n, float):
+        n = float(n.values[0])
     else:
         pass
-    
+
     pr = 1 - 1 / np.array(
         target_return_periods
         )  # Probabilities associated with target_return_periods
@@ -1358,17 +1680,22 @@ def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess, method_root_sc
         else:
             # Use the last valid guess if none exceeds pr
             last_valid_idx = np.where(pv < 1)[0]
-            first_guess = vguess[last_valid_idx[-1]] if len(last_valid_idx) > 0 else vguess[-1]
+            if len(last_valid_idx) > 0:
+                first_guess = vguess[last_valid_idx[-1]]
+            else:
+                first_guess = vguess[-1]
 
         # Define the function for root finding
         def func(y):
             return MC_tSMEV_cdf(y, wbl_phat, n) - pr[t]
 
         # Use root_scalar as an alternative to MATLAB's fzero
-        result = root_scalar(func, 
-                             bracket=[vguess[0], vguess[-1]], 
-                             x0=first_guess,
-                             method=method_root_scalar)
+        result = root_scalar(
+            func,
+            bracket=[vguess[0], vguess[-1]],
+            x0=first_guess,
+            method=method_root_scalar
+        )
 
         if result.converged:
             qnt[t] = result.root
@@ -1376,8 +1703,12 @@ def SMEV_Mc_inversion(wbl_phat, n, target_return_periods, vguess, method_root_sc
     return qnt
 
 
-
-def inverse_magnitude_model(F_phat, eT, qs, b_exp=False):
+def inverse_magnitude_model(
+    F_phat,
+    eT,
+    qs,
+    b_exp=False
+):
     """
     Calculate percentiles from the Weibell magnitude model
 
@@ -1385,30 +1716,36 @@ def inverse_magnitude_model(F_phat, eT, qs, b_exp=False):
     ----------
     F_phat : numpy.ndarray
         distribution values. F_phat = [kappa_0,b,lambda_0,a].
-    x : numpy.ndarray
-        x (temperature) values from which to produce distribution.
+    eT : numpy.ndarray
+        Temperature values from which to produce distribution.
     qs : list
-        list of percentiles to calculate (between 0 and 1). e.g. [0.85,0.95,0.99].
+        list of percentiles to calculate (between 0 and 1).
+        e.g. [0.85,0.95,0.99].
     b_exp : bool
         If True, uses the exponential rather than linear fit for b.
 
     Returns
     -------
     percentile_lines : numpy.ndarray
-        array with shape length(qs) by length(eT) giving the magnitudes for each eT. percentile_lines[0] are the values for qs[0].
+        array with shape length(qs) by length(eT) giving
+        the magnitudes for each eT. percentile_lines[0] are
+        the values for qs[0].
 
     """
 
     percentile_lines = np.zeros((len(qs), len(eT)))
     if b_exp:
         for iq, q in enumerate(qs):
-            percentile_lines[iq,:] = F_phat[2]*np.exp(F_phat[3] * eT)*(-np.log(1-q))**(1/(F_phat[0]*np.exp(F_phat[1]*eT)))
+            scale = F_phat[2] * np.exp(F_phat[3] * eT)
+            # b is multiplicatve
+            shape = F_phat[0] * np.exp(F_phat[1] * eT)
+            percentile_lines[iq, :] = scale * (-np.log(1 - q)) ** (1 / shape)
+
     else:
         for iq, q in enumerate(qs):
-            percentile_lines[iq, :] = (
-                F_phat[2]
-                * np.exp(F_phat[3] * eT)
-                * (-np.log(1 - q)) ** (1 / (F_phat[0] + F_phat[1] * eT))
-            )
+            scale = F_phat[2] * np.exp(F_phat[3] * eT)
+            # b is additive
+            shape = F_phat[0] + F_phat[1] * eT
+            percentile_lines[iq, :] = scale * (-np.log(1 - q)) ** (1 / shape)
 
     return percentile_lines

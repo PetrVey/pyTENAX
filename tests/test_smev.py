@@ -41,6 +41,7 @@ import numpy as np
 import pandas as pd
 from importlib.resources import files
 from pyTENAX import smev
+from pyTENAX.smev import _NUMBA_AVAILABLE
 
 
 class TestSMEV(unittest.TestCase):
@@ -226,6 +227,45 @@ class TestSMEV(unittest.TestCase):
             RL, self.EXPECTED_RL["1440"], atol=0.1,
             err_msg="1440 min return levels mismatch"
         )
+
+    # -------------------------------------------------------------------------
+    # get_ordinary_events_values — method consistency
+    # -------------------------------------------------------------------------
+    @unittest.skipUnless(_NUMBA_AVAILABLE, "numba not installed")
+    def test_all_methods_return_same_oe_time_and_ordinary(self):
+        """vectorized, njit, and njit_parallel must return identical
+        oe_time and ordinary values for every duration."""
+        methods = ("vectorized", "njit", "njit_parallel")
+        results = {}
+        for method in methods:
+            dict_oe, _ = self.S.get_ordinary_events_values(
+                data=self.df_arr,
+                dates=self.df_dates,
+                arr_dates_oe=self.arr_dates,
+                method=method,
+            )
+            results[method] = dict_oe
+
+        for dur in [str(d) for d in self.S.durations]:
+            ref_oe = results["vectorized"][dur]
+            for method in ("njit", "njit_parallel"):
+                cmp_oe = results[method][dur]
+                np.testing.assert_array_equal(
+                    ref_oe["oe_time"].values,
+                    cmp_oe["oe_time"].values,
+                    err_msg=(
+                        f"oe_time mismatch: vectorized vs {method} "
+                        f"at duration {dur} min"
+                    ),
+                )
+                np.testing.assert_array_equal(
+                    ref_oe["ordinary"].values,
+                    cmp_oe["ordinary"].values,
+                    err_msg=(
+                        f"ordinary mismatch: vectorized vs {method} "
+                        f"at duration {dur} min"
+                    ),
+                )
 
     @classmethod
     def tearDownClass(cls):

@@ -15,4 +15,5 @@ dependencies:
   - sphinx_rtd_theme==3.0.1 # Sphinx RTD theme here
   - nbsphinx==0.9.7         # Sphinx here for RTD
   - ipykernel       # ipyrknel is to correctly made RTD
-  - numba=0.65.0
+  - numba=0.65.1
+  - joblib=1.5.3

@@ -10,7 +10,7 @@ import numpy as np
 from pyTENAX import tenax
 from scipy.stats import gennorm
 from scipy.optimize import root_scalar
-from typing import List, Tuple, Union, Optional
+from typing import Tuple, Union
 import time
 
 
@@ -19,12 +19,15 @@ def MC_tSMEV_cdf_old(
     y: Union[float, np.ndarray], wbl_phat: np.ndarray, n: int
 ) -> Tuple[float, np.ndarray]:
     """
-    Calculate the cumulative distribution function (CDF) based on the given Weibull parameters.
+    Calculate the cumulative distribution function (CDF) 
+    based on the given Weibull parameters.
 
     Parameters
     ----------
-        y (Union[float, np.ndarray]): Value(s) at which to evaluate the CDF.
-        wbl_phat (np.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
+        y (Union[float, np.ndarray]): Value(s) 
+        at which to evaluate the CDF.
+        wbl_phat (np.ndarray): Array of Weibull parameters,
+         where each row contains [shape, scale].
         n (int): Power to raise the final probability to.
 
     Returns
@@ -36,6 +39,7 @@ def MC_tSMEV_cdf_old(
         p += 1 - np.exp(-((y / wbl_phat[i, 0]) ** wbl_phat[i, 1]))
     p = (p / wbl_phat.shape[0]) ** n
     return p
+
 
 def SMEV_Mc_inversion_old(
     wbl_phat: np.ndarray,
@@ -49,9 +53,11 @@ def SMEV_Mc_inversion_old(
 
     Parameters
     ----------
-        wbl_phat (numpy.ndarray): Array of Weibull parameters, where each row contains [shape, scale].
+        wbl_phat (numpy.ndarray): Array of Weibull parameters,
+        where each row contains [shape, scale].
         n (int): Power to raise the final probability to.
-        target_return_periods (list or array-like): Desired target return periods.
+        target_return_periods (list or array-like):
+            Desired target return periods.
         vguess (numpy.ndarray): Initial guesses for inversion.
 
     Returns
@@ -104,15 +110,16 @@ def SMEV_Mc_inversion_old(
 class TestMc_inversion(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # The time resolution and durations are just placeholders, 
-        # but they must be defined in the class; otherwise, some functions will not work.
+        # The time resolution and durations are just placeholders,
+        # but they must be defined in the class; otherwise,
+        # some functions will not work.
         cls.S = tenax.TENAX(
            return_period=[2, 5, 10, 20, 50, 100, 200],
            durations=[10],
            time_resolution=5,
            left_censoring=[0, 0.90],
            alpha=0.05,
-       )
+        )
         
         # Define random seed for reproduductyibily 
         np.random.seed(42)
@@ -120,7 +127,10 @@ class TestMc_inversion(unittest.TestCase):
         n_samples = 2000
 
         # Temperature samples
-        temperature_values = gennorm.rvs(beta=4, loc=10, scale=11.5, size=n_samples)
+        temperature_values = gennorm.rvs(beta=4,
+                                         loc=10,
+                                         scale=11.5,
+                                         size=n_samples)
         temperature_values = np.clip(temperature_values, -10, 50)
 
         # Precipitation samples depending on T based on weibull distribution
@@ -175,7 +185,8 @@ class TestMc_inversion(unittest.TestCase):
     def test_inversion_consistency(cls):
         """
         Compare SMEV_Mc_inversion_old vs library SMEV_Mc_inversion.
-        Runs both 100 times, checks equality on each run, and reports average timings.
+        Runs both 100 times, checks equality on each run, 
+        and reports average timings.
         """
         n_runs = 1
         times_old = []
