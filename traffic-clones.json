@@ -18,5 +18,10 @@
     "timestamp": "2026-06-16T00:00:00Z",
     "count": 8,
     "uniques": 4
+  },
+  {
+    "timestamp": "2026-06-17T00:00:00Z",
+    "count": 19,
+    "uniques": 9
   }
 ]
